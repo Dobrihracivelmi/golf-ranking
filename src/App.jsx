@@ -95,9 +95,6 @@ export default function App() {
     }
   }
 
-  const getCourses = () =>
-    Array.from(new Set(data.rounds.map(r => r.course).filter(Boolean)))
-
   // ─────────────────────────────────────────────────────────────────────────
   const tabs = [
     { id: 'ranking', label: 'Rebríček',    icon: '🏆' },
@@ -142,7 +139,7 @@ export default function App() {
           <RankingTable rounds={data.rounds} captainAwards={data.captainAwards} />
         )}
         {tab === 'add' && (
-          <AddRound onAdd={addRound} courses={getCourses()} onTabChange={setTab} />
+          <AddRound onAdd={addRound} onTabChange={setTab} />
         )}
         {tab === 'history' && (
           <History rounds={data.rounds} onDelete={deleteRound} />

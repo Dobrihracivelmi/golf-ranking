@@ -876,6 +876,79 @@ input[type=number]::-webkit-inner-spin-button { opacity: .4; }
 .cat-form-actions { display: flex; gap: 10px; }
 .cat-form-actions .submit-btn { flex: 1; }
 
+/* ── Tee buttons (AddRound) ── */
+.tee-buttons { display: flex; gap: 10px; margin-top: 4px; }
+.tee-btn {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface2);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+}
+.tee-btn:hover { border-color: var(--border); color: var(--text); }
+.tee-btn-white.tee-btn-selected  { border-color: #e0e0e0; background: rgba(255,255,255,.1); color: #fff; }
+.tee-btn-yellow.tee-btn-selected { border-color: var(--gold); background: rgba(240,192,64,.15); color: var(--gold); }
+
+/* ── Adjustment info banner ── */
+.adj-info {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 9px 13px;
+  border-radius: var(--radius-sm);
+  font-size: 0.84rem;
+  border: 1px solid;
+}
+.adj-info.adj-neg  { background: rgba(62,207,128,.08);  border-color: rgba(62,207,128,.3);  color: var(--pos); }
+.adj-info.adj-pos  { background: rgba(224,85,85,.08);   border-color: rgba(224,85,85,.3);   color: var(--neg); }
+.adj-info.adj-zero { background: var(--surface2);        border-color: var(--border-soft);   color: var(--text-muted); }
+.adj-info-label { font-weight: 600; }
+.adj-info-value { font-weight: 900; font-size: 1rem; }
+.adj-info-hint  { opacity: .7; }
+
+/* ── Live adjusted preview in player row ── */
+.fg-adj-preview {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding-top: 9px; /* align with input */
+}
+.adj-preview-label { color: var(--text-muted); font-size: 0.8rem; }
+.adj-preview-value {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--g-accent);
+  min-width: 28px;
+}
+
+/* ── Round pill: adjusted strokes & tee ── */
+.rp-adjusted {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--g-accent);
+  line-height: 1.2;
+}
+.rp-tee {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+}
+
+/* ── Úprava column ── */
+.td-adj { font-weight: 700; white-space: nowrap; }
+.td-adj.pos { color: var(--pos); }
+.td-adj.neg { color: var(--neg); }
+
+/* ── History: tee label & adjusted strokes ── */
+.hc-tee { color: var(--text-muted); font-size: 0.85em; }
+.hc-adj { font-size: 0.78rem; color: var(--g-accent); font-weight: 600; margin-left: 3px; }
+
 /* ── Captain column in ranking table ── */
 .td-captain { vertical-align: top; min-width: 120px; }
 

@@ -1,4 +1,5 @@
 import { fmtDate } from '../utils/ranking'
+import { TEE_LABELS } from '../utils/courses'
 
 function pluralKolo(n) {
   if (n === 1) return 'kolo'
@@ -29,11 +30,10 @@ export default function History({ rounds, onDelete }) {
     )
   }
 
-  // Group rounds by month for visual separation
   const grouped = []
   let currentMonth = null
   for (const round of sorted) {
-    const month = round.date.slice(0, 7) // YYYY-MM
+    const month = round.date.slice(0, 7)
     if (month !== currentMonth) {
       currentMonth = month
       const d = new Date(round.date + 'T00:00:00')
@@ -64,12 +64,20 @@ export default function History({ rounds, onDelete }) {
             )
           }
           const { round } = item
-          const byScore = [...round.players].sort((a, b) => a.strokes - b.strokes)
+          // Sort by adjusted strokes (falls back to raw for old rounds)
+          const byScore = [...round.players].sort(
+            (a, b) => (a.adjustedStrokes ?? a.strokes) - (b.adjustedStrokes ?? b.strokes)
+          )
+          const teeLabel = round.tee ? TEE_LABELS[round.tee] : null
+
           return (
             <div key={round.id} className="history-card">
               <div className="hc-header">
                 <div className="hc-meta">
-                  <span className="hc-course">⛳ {round.course}</span>
+                  <span className="hc-course">
+                    ⛳ {round.course}
+                    {teeLabel && <span className="hc-tee"> · {teeLabel.toLowerCase()}</span>}
+                  </span>
                   <span className="hc-date">{fmtDate(round.date)}</span>
                 </div>
                 <button
@@ -82,13 +90,19 @@ export default function History({ rounds, onDelete }) {
               </div>
 
               <div className="hc-players">
-                {byScore.map((p, idx) => (
-                  <div key={p.name} className={`hc-player${idx === 0 ? ' hc-winner' : ''}`}>
-                    {idx === 0 && <span className="hc-win-icon">🏆</span>}
-                    <span className="hc-pname">{p.name}</span>
-                    <span className="hc-strokes">{p.strokes}</span>
-                  </div>
-                ))}
+                {byScore.map((p, idx) => {
+                  const hasAdj = p.adjustedStrokes !== undefined && p.adjustedStrokes !== p.strokes
+                  return (
+                    <div key={p.name} className={`hc-player${idx === 0 ? ' hc-winner' : ''}`}>
+                      {idx === 0 && <span className="hc-win-icon">🏆</span>}
+                      <span className="hc-pname">{p.name}</span>
+                      <span className="hc-strokes">
+                        {p.strokes}
+                        {hasAdj && <span className="hc-adj"> ({p.adjustedStrokes})</span>}
+                      </span>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )

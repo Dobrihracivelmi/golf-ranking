@@ -15,16 +15,20 @@ export const DEFAULT_CAPTAIN_CATEGORIES = [
 ]
 
 export function calculateRankings(rounds, captainAwards = []) {
-  // Build per-player list of rounds, sorted newest first
+  // Build per-player list of rounds with adjusted strokes, sorted newest first
   const playerRoundsMap = {}
   for (const round of rounds) {
     for (const p of round.players) {
       if (!playerRoundsMap[p.name]) playerRoundsMap[p.name] = []
       playerRoundsMap[p.name].push({
-        id: round.id,
-        date: round.date,
-        course: round.course,
-        strokes: p.strokes,
+        id:             round.id,
+        date:           round.date,
+        course:         round.course,
+        tee:            round.tee            ?? null,
+        adjustment:     round.courseAdjustment ?? 0,
+        strokes:        p.strokes,
+        // Fall back to raw strokes for rounds recorded before course adjustments
+        adjustedStrokes: p.adjustedStrokes  ?? p.strokes,
       })
     }
   }
@@ -32,28 +36,28 @@ export function calculateRankings(rounds, captainAwards = []) {
     playerRoundsMap[name].sort((a, b) => new Date(b.date) - new Date(a.date))
   }
 
-  // Stroke score: last 3 rounds normalised to 3-round equivalent
+  // Stroke score uses adjusted strokes, normalised to 3-round equivalent
   const strokeScores = {}
   for (const name in playerRoundsMap) {
     const last3 = playerRoundsMap[name].slice(0, 3)
-    if (last3.length === 1) {
-      strokeScores[name] = last3[0].strokes * 3
-    } else if (last3.length === 2) {
-      strokeScores[name] = ((last3[0].strokes + last3[1].strokes) / 2) * 3
+    const s = last3.map(r => r.adjustedStrokes)
+    if (s.length === 1) {
+      strokeScores[name] = s[0] * 3
+    } else if (s.length === 2) {
+      strokeScores[name] = ((s[0] + s[1]) / 2) * 3
     } else {
-      strokeScores[name] = last3[0].strokes + last3[1].strokes + last3[2].strokes
+      strokeScores[name] = s[0] + s[1] + s[2]
     }
   }
 
-  // Rank by stroke score to determine H2H upsets (lower score = better = rank 1)
+  // Rank by stroke score (lower = better = rank 1)
   const sortedByStroke = Object.keys(strokeScores).sort(
     (a, b) => strokeScores[a] - strokeScores[b]
   )
   const rankMap = {}
   sortedByStroke.forEach((name, i) => { rankMap[name] = i + 1 })
 
-  // H2H: for each round, compare every pair who played together.
-  // Upset = worse-ranked player (higher rank number) beats better-ranked player.
+  // H2H: compare adjusted strokes so course difficulty is accounted for
   const h2hPoints = {}
   for (const name in playerRoundsMap) h2hPoints[name] = 0
 
@@ -62,9 +66,11 @@ export function calculateRankings(rounds, captainAwards = []) {
     for (let i = 0; i < rp.length; i++) {
       for (let j = i + 1; j < rp.length; j++) {
         const a = rp[i], b = rp[j]
-        if (a.strokes === b.strokes) continue
+        const aAdj = a.adjustedStrokes ?? a.strokes
+        const bAdj = b.adjustedStrokes ?? b.strokes
+        if (aAdj === bAdj) continue
 
-        const [winner, loser] = a.strokes < b.strokes ? [a, b] : [b, a]
+        const [winner, loser] = aAdj < bAdj ? [a, b] : [b, a]
         const winnerRank = rankMap[winner.name]
         const loserRank  = rankMap[loser.name]
 
@@ -77,7 +83,7 @@ export function calculateRankings(rounds, captainAwards = []) {
     }
   }
 
-  // Captain points: sum of all awards per player
+  // Captain points
   const captainPointsMap = {}
   for (const name in playerRoundsMap) captainPointsMap[name] = 0
   for (const award of captainAwards) {
@@ -87,15 +93,20 @@ export function calculateRankings(rounds, captainAwards = []) {
   }
 
   // Final Score = Stroke − H2H − Captain (lower is better)
-  const ranked = Object.keys(strokeScores).map(name => ({
-    name,
-    strokeScore:   strokeScores[name],
-    h2hPoints:     h2hPoints[name] || 0,
-    captainPoints: captainPointsMap[name] || 0,
-    finalScore:    strokeScores[name] - (h2hPoints[name] || 0) - (captainPointsMap[name] || 0),
-    lastRounds:    playerRoundsMap[name].slice(0, 3),
-    totalRounds:   playerRoundsMap[name].length,
-  }))
+  const ranked = Object.keys(strokeScores).map(name => {
+    const last3 = playerRoundsMap[name].slice(0, 3)
+    const totalAdjustment = last3.reduce((sum, r) => sum + (r.adjustment ?? 0), 0)
+    return {
+      name,
+      strokeScore:     strokeScores[name],
+      totalAdjustment,
+      h2hPoints:       h2hPoints[name]       || 0,
+      captainPoints:   captainPointsMap[name] || 0,
+      finalScore:      strokeScores[name] - (h2hPoints[name] || 0) - (captainPointsMap[name] || 0),
+      lastRounds:      last3,
+      totalRounds:     playerRoundsMap[name].length,
+    }
+  })
 
   ranked.sort((a, b) => {
     if (a.finalScore !== b.finalScore) return a.finalScore - b.finalScore

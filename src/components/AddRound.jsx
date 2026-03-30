@@ -1,15 +1,40 @@
 import { useState } from 'react'
 import { ALL_PLAYERS } from '../utils/ranking'
+import { COURSES_SORTED, TEE_LABELS } from '../utils/courses'
 
 const emptyPlayer = () => ({ name: '', strokes: '' })
 
-export default function AddRound({ onAdd, courses, onTabChange }) {
+export default function AddRound({ onAdd, onTabChange }) {
   const today = new Date().toISOString().split('T')[0]
-  const [date,    setDate]    = useState(today)
-  const [course,  setCourse]  = useState('')
-  const [players, setPlayers] = useState([emptyPlayer()])
-  const [errors,  setErrors]  = useState({})
-  const [saved,   setSaved]   = useState(false)
+  const [date,       setDate]       = useState(today)
+  const [courseName, setCourseName] = useState('')
+  const [tee,        setTee]        = useState('')
+  const [players,    setPlayers]    = useState([emptyPlayer()])
+  const [errors,     setErrors]     = useState({})
+  const [saved,      setSaved]      = useState(false)
+
+  // ── Derived from course + tee selection ───────────────────────────────────
+  const selectedCourse = COURSES_SORTED.find(c => c.name === courseName) || null
+  const availableTees  = selectedCourse
+    ? ['white', 'yellow'].filter(t => selectedCourse[t] !== null)
+    : []
+  const adjustment = (selectedCourse && tee !== '') ? selectedCourse[tee] : null
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
+  const handleCourseChange = (name) => {
+    setCourseName(name)
+    setErrors(e => { const n = {...e}; delete n.course; delete n.tee; return n })
+    const c = COURSES_SORTED.find(c => c.name === name)
+    if (!c) { setTee(''); return }
+    const tees = ['white', 'yellow'].filter(t => c[t] !== null)
+    // Auto-select if only one tee available
+    setTee(tees.length === 1 ? tees[0] : '')
+  }
+
+  const handleTeeChange = (t) => {
+    setTee(t)
+    setErrors(e => { const n = {...e}; delete n.tee; return n })
+  }
 
   const updatePlayer = (idx, field, value) => {
     setPlayers(ps => ps.map((p, i) => i === idx ? { ...p, [field]: value } : p))
@@ -31,8 +56,9 @@ export default function AddRound({ onAdd, courses, onTabChange }) {
 
   const validate = () => {
     const errs = {}
-    if (!date) errs.date = 'Dátum je povinný'
-    if (!course.trim()) errs.course = 'Názov ihriska je povinný'
+    if (!date)       errs.date   = 'Dátum je povinný'
+    if (!courseName) errs.course = 'Vyberte ihrisko'
+    if (!tee)        errs.tee    = 'Vyberte odpaliskoté'
 
     let filled = 0
     players.forEach((p, i) => {
@@ -42,12 +68,9 @@ export default function AddRound({ onAdd, courses, onTabChange }) {
       }
       if (p.name && p.strokes && !isNaN(Number(p.strokes))) filled++
     })
-
     if (filled < 1) errs.players = 'Vyžaduje sa aspoň 1 úplne vyplnený hráč'
-
     const names = players.map(p => p.name).filter(Boolean)
     if (names.length !== new Set(names).size) errs.players = 'Duplikovaní hráči nie sú povolení'
-
     return errs
   }
 
@@ -56,65 +79,105 @@ export default function AddRound({ onAdd, courses, onTabChange }) {
     const errs = validate()
     if (Object.keys(errs).length) { setErrors(errs); return }
 
+    const adj = adjustment ?? 0
     onAdd({
       date,
-      course: course.trim(),
+      course:           courseName,
+      tee,
+      courseAdjustment: adj,
       players: players
         .filter(p => p.name && p.strokes)
-        .map(p => ({ name: p.name, strokes: Number(p.strokes) })),
+        .map(p => ({
+          name:           p.name,
+          strokes:        Number(p.strokes),
+          adjustedStrokes: Number(p.strokes) + adj,
+        })),
     })
 
     setSaved(true)
     setTimeout(() => {
       setSaved(false)
       setDate(today)
-      setCourse('')
+      setCourseName('')
+      setTee('')
       setPlayers([emptyPlayer()])
       setErrors({})
       onTabChange('ranking')
     }, 1400)
   }
 
-  const usedNames   = new Set(players.map(p => p.name).filter(Boolean))
+  const usedNames    = new Set(players.map(p => p.name).filter(Boolean))
   const availableFor = (idx) =>
     ALL_PLAYERS.filter(n => n === players[idx].name || !usedNames.has(n))
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="card">
       <h2 className="section-title">Pridať nové kolo</h2>
 
       <form onSubmit={handleSubmit} className="round-form" noValidate>
-        {/* Dátum + Ihrisko */}
-        <div className="form-row-2">
-          <div className="form-group">
-            <label className="form-label">Dátum</label>
-            <input
-              type="date"
-              className={`form-input${errors.date ? ' input-error' : ''}`}
-              value={date}
-              max={today}
-              onChange={e => { setDate(e.target.value); setErrors(prev => { const n = {...prev}; delete n.date; return n }) }}
-            />
-            {errors.date && <span className="err-msg">{errors.date}</span>}
-          </div>
 
-          <div className="form-group">
-            <label className="form-label">Golfové ihrisko</label>
-            <input
-              type="text"
-              list="course-options"
-              className={`form-input${errors.course ? ' input-error' : ''}`}
-              value={course}
-              onChange={e => { setCourse(e.target.value); setErrors(prev => { const n = {...prev}; delete n.course; return n }) }}
-              placeholder="napr. Augusta National"
-              autoComplete="off"
-            />
-            <datalist id="course-options">
-              {courses.map(c => <option key={c} value={c} />)}
-            </datalist>
-            {errors.course && <span className="err-msg">{errors.course}</span>}
-          </div>
+        {/* Dátum */}
+        <div className="form-group">
+          <label className="form-label">Dátum</label>
+          <input
+            type="date"
+            className={`form-input${errors.date ? ' input-error' : ''}`}
+            value={date}
+            max={today}
+            onChange={e => { setDate(e.target.value); setErrors(p => { const n={...p}; delete n.date; return n }) }}
+          />
+          {errors.date && <span className="err-msg">{errors.date}</span>}
         </div>
+
+        {/* Ihrisko */}
+        <div className="form-group">
+          <label className="form-label">Ihrisko</label>
+          <select
+            className={`form-input${errors.course ? ' input-error' : ''}`}
+            value={courseName}
+            onChange={e => handleCourseChange(e.target.value)}
+          >
+            <option value="">Vybrať ihrisko…</option>
+            {COURSES_SORTED.map(c => (
+              <option key={c.name} value={c.name}>{c.name}</option>
+            ))}
+          </select>
+          {errors.course && <span className="err-msg">{errors.course}</span>}
+        </div>
+
+        {/* Odpaliskoté (tee) — shown only after a course is selected */}
+        {selectedCourse && (
+          <div className="form-group">
+            <label className="form-label">Odpaliskoté</label>
+            <div className="tee-buttons">
+              {availableTees.map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  className={`tee-btn tee-btn-${t}${tee === t ? ' tee-btn-selected' : ''}`}
+                  onClick={() => handleTeeChange(t)}
+                >
+                  {TEE_LABELS[t]}
+                </button>
+              ))}
+            </div>
+            {errors.tee && <span className="err-msg">{errors.tee}</span>}
+          </div>
+        )}
+
+        {/* Adjustment info */}
+        {adjustment !== null && (
+          <div className={`adj-info ${adjustment < 0 ? 'adj-neg' : adjustment > 0 ? 'adj-pos' : 'adj-zero'}`}>
+            <span className="adj-info-label">Úprava pre toto kolo:</span>
+            <span className="adj-info-value">
+              {adjustment > 0 ? `+${adjustment}` : adjustment}
+            </span>
+            <span className="adj-info-hint">
+              (upravené rany = vaše rany {adjustment >= 0 ? '+' : ''}{adjustment})
+            </span>
+          </div>
+        )}
 
         {/* Hráči */}
         <div className="players-block">
@@ -129,7 +192,6 @@ export default function AddRound({ onAdd, courses, onTabChange }) {
             {players.map((player, idx) => (
               <div key={idx} className="player-row">
                 <span className="player-row-num">{idx + 1}</span>
-
                 <div className="player-row-inputs">
                   <div className="form-group fg-grow">
                     <select
@@ -146,7 +208,6 @@ export default function AddRound({ onAdd, courses, onTabChange }) {
                       <span className="err-msg">{errors[`p_${idx}_name`]}</span>
                     )}
                   </div>
-
                   <div className="form-group fg-strokes">
                     <input
                       type="number"
@@ -161,8 +222,16 @@ export default function AddRound({ onAdd, courses, onTabChange }) {
                       <span className="err-msg">{errors[`p_${idx}_strokes`]}</span>
                     )}
                   </div>
+                  {/* Live adjusted strokes preview */}
+                  {adjustment !== null && player.strokes && !isNaN(Number(player.strokes)) && (
+                    <div className="fg-adj-preview">
+                      <span className="adj-preview-label">→</span>
+                      <span className="adj-preview-value">
+                        {Number(player.strokes) + adjustment}
+                      </span>
+                    </div>
+                  )}
                 </div>
-
                 {players.length > 1 && (
                   <button
                     type="button"
