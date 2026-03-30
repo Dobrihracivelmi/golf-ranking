@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore'
 import { db } from './firebase'
 import { DEFAULT_CAPTAIN_CATEGORIES } from './utils/ranking'
@@ -11,71 +11,83 @@ const INITIAL_DATA = {
   captainAwards:     [],
 }
 
-const TIMEOUT_MS = 12000
-
 export function useAppData() {
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(null)
 
-  useEffect(() => {
-    let settled = false
+  // Tracks whether the first snapshot has arrived — only used to cancel the
+  // timeout, never used to block subsequent real-time updates.
+  const firstLoadDone = useRef(false)
 
-    // If Firestore doesn't respond at all within 12 s, show a helpful error
+  useEffect(() => {
+    console.log('[useAppData] mounting, attaching onSnapshot')
+
+    // Show a helpful error if Firestore never responds at all
     const timer = setTimeout(() => {
-      if (!settled) {
-        settled = true
+      if (!firstLoadDone.current) {
+        console.error('[useAppData] timeout — Firestore did not respond in 12 s')
         setError(
           'Spojenie s databázou vypršalo (12 s). ' +
-          'Skontrolujte: 1) Firestore pravidlá (allow read, write: if true) ' +
-          '2) Firebase projectId v src/firebase.js ' +
-          '3) Internetové pripojenie'
+          'Skontrolujte Firestore pravidlá (allow read, write: if true) a projektId v src/firebase.js.'
         )
         setLoading(false)
       }
-    }, TIMEOUT_MS)
+    }, 12000)
 
     const unsub = onSnapshot(
       DATA_REF,
       (snap) => {
-        clearTimeout(timer)
-        if (settled) return
-        settled = true
+        console.log('[useAppData] snapshot received, exists:', snap.exists())
+
+        // Cancel the timeout the moment we hear back from Firestore
+        if (!firstLoadDone.current) {
+          clearTimeout(timer)
+          firstLoadDone.current = true
+        }
 
         if (snap.exists()) {
           const d = snap.data()
+          console.log('[useAppData] rounds:', d.rounds?.length ?? 0,
+            'categories:', d.captainCategories?.length ?? 0,
+            'awards:', d.captainAwards?.length ?? 0)
           setData({
-            rounds:            d.rounds            || [],
-            captainCategories: d.captainCategories || DEFAULT_CAPTAIN_CATEGORIES,
-            captainAwards:     d.captainAwards     || [],
+            rounds:            Array.isArray(d.rounds)            ? d.rounds            : [],
+            captainCategories: Array.isArray(d.captainCategories) ? d.captainCategories : DEFAULT_CAPTAIN_CATEGORIES,
+            captainAwards:     Array.isArray(d.captainAwards)     ? d.captainAwards     : [],
           })
         } else {
-          // First ever load — seed the document with defaults
-          setDoc(DATA_REF, INITIAL_DATA).catch(err => {
-            console.error('setDoc failed:', err)
-          })
+          console.log('[useAppData] document missing — seeding defaults')
+          setDoc(DATA_REF, INITIAL_DATA).catch(err =>
+            console.error('[useAppData] setDoc error:', err)
+          )
           setData(INITIAL_DATA)
         }
+
+        setError(null)   // clear any previous timeout error if Firestore eventually connects
         setLoading(false)
+        console.log('[useAppData] loading set to false')
       },
       (err) => {
+        console.error('[useAppData] onSnapshot error:', err.code, err.message)
         clearTimeout(timer)
-        if (settled) return
-        settled = true
-        console.error('Firestore onSnapshot error:', err)
-        setError(`Firestore chyba: ${err.code} — ${err.message}`)
+        firstLoadDone.current = true
+        setError(`Firestore: ${err.code} — ${err.message}`)
         setLoading(false)
       }
     )
 
     return () => {
+      console.log('[useAppData] cleanup')
       clearTimeout(timer)
       unsub()
     }
   }, [])
 
   const update = (changes) =>
-    updateDoc(DATA_REF, changes).catch(err => console.error('updateDoc failed:', err))
+    updateDoc(DATA_REF, changes).catch(err =>
+      console.error('[useAppData] updateDoc error:', err)
+    )
 
   const addRound = (round) => {
     const newRound = {

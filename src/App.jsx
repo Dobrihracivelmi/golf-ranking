@@ -6,6 +6,8 @@ import CaptainPanel from './components/CaptainPanel'
 import { useAppData } from './useAppData'
 
 export default function App() {
+  console.log('[App] render start')
+
   const {
     data,
     loading,
@@ -18,6 +20,8 @@ export default function App() {
     deleteCaptainCategory,
   } = useAppData()
 
+  console.log('[App] loading:', loading, '| error:', error, '| data:', data ? 'present' : 'null')
+
   const [tab, setTab] = useState('ranking')
 
   // Captain auth state (session-only, not persisted)
@@ -27,8 +31,9 @@ export default function App() {
   const [pwInput,          setPwInput]          = useState('')
   const [pwError,          setPwError]          = useState(false)
 
-  // ── Loading / error screens ───────────────────────────────────────────────
+  // ── Loading screen ────────────────────────────────────────────────────────
   if (loading) {
+    console.log('[App] rendering loading screen')
     return (
       <div className="loading-screen">
         <div className="spinner" />
@@ -38,7 +43,9 @@ export default function App() {
     )
   }
 
+  // ── Error screen ──────────────────────────────────────────────────────────
   if (error) {
+    console.error('[App] rendering error screen:', error)
     return (
       <div className="loading-screen">
         <div style={{ fontSize: '2.5rem' }}>⚠️</div>
@@ -50,6 +57,19 @@ export default function App() {
       </div>
     )
   }
+
+  // ── Safety net: data should never be null here, but guard anyway ──────────
+  if (!data) {
+    console.error('[App] loading=false, error=null, but data is still null — unexpected state')
+    return (
+      <div className="loading-screen">
+        <div className="spinner" />
+        <p className="loading-text">Inicializujem…</p>
+      </div>
+    )
+  }
+
+  console.log('[App] rendering main UI, tab:', tab)
 
   // ── Captain handlers ──────────────────────────────────────────────────────
   const handleCrownClick = () => {
