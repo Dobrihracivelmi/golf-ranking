@@ -11,15 +11,37 @@ const INITIAL_DATA = {
   captainAwards:     [],
 }
 
+const TIMEOUT_MS = 12000
+
 export function useAppData() {
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(null)
 
   useEffect(() => {
+    let settled = false
+
+    // If Firestore doesn't respond at all within 12 s, show a helpful error
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true
+        setError(
+          'Spojenie s databázou vypršalo (12 s). ' +
+          'Skontrolujte: 1) Firestore pravidlá (allow read, write: if true) ' +
+          '2) Firebase projectId v src/firebase.js ' +
+          '3) Internetové pripojenie'
+        )
+        setLoading(false)
+      }
+    }, TIMEOUT_MS)
+
     const unsub = onSnapshot(
       DATA_REF,
       (snap) => {
+        clearTimeout(timer)
+        if (settled) return
+        settled = true
+
         if (snap.exists()) {
           const d = snap.data()
           setData({
@@ -29,22 +51,31 @@ export function useAppData() {
           })
         } else {
           // First ever load — seed the document with defaults
-          setDoc(DATA_REF, INITIAL_DATA)
+          setDoc(DATA_REF, INITIAL_DATA).catch(err => {
+            console.error('setDoc failed:', err)
+          })
           setData(INITIAL_DATA)
         }
         setLoading(false)
       },
       (err) => {
-        console.error('Firestore error:', err)
-        setError(err.message)
+        clearTimeout(timer)
+        if (settled) return
+        settled = true
+        console.error('Firestore onSnapshot error:', err)
+        setError(`Firestore chyba: ${err.code} — ${err.message}`)
         setLoading(false)
       }
     )
-    return unsub
+
+    return () => {
+      clearTimeout(timer)
+      unsub()
+    }
   }, [])
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-  const update = (changes) => updateDoc(DATA_REF, changes)
+  const update = (changes) =>
+    updateDoc(DATA_REF, changes).catch(err => console.error('updateDoc failed:', err))
 
   const addRound = (round) => {
     const newRound = {

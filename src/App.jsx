@@ -33,6 +33,7 @@ export default function App() {
       <div className="loading-screen">
         <div className="spinner" />
         <p className="loading-text">Načítavam dáta…</p>
+        <p className="loading-sub">Pripájam sa k Firebase…</p>
       </div>
     )
   }
@@ -40,12 +41,12 @@ export default function App() {
   if (error) {
     return (
       <div className="loading-screen">
-        <div className="empty-icon">⚠️</div>
-        <h2 style={{ color: 'var(--red)', marginBottom: 8 }}>Chyba pripojenia</h2>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', maxWidth: 320, textAlign: 'center' }}>
-          Nepodarilo sa pripojiť k databáze. Skontrolujte internetové pripojenie alebo konfiguráciu Firebase.<br /><br />
-          <code style={{ fontSize: '0.8rem', color: 'var(--g-accent)' }}>{error}</code>
-        </p>
+        <div style={{ fontSize: '2.5rem' }}>⚠️</div>
+        <h2 className="error-title">Chyba pripojenia</h2>
+        <p className="error-msg">{error}</p>
+        <button className="submit-btn" style={{ marginTop: 8 }} onClick={() => window.location.reload()}>
+          Skúsiť znova
+        </button>
       </div>
     )
   }

@@ -546,7 +546,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .empty-state p { font-size: 0.9rem; }
 .empty-state em { color: var(--g-accent); font-style: normal; font-weight: 600; }
 
-/* ── Loading screen ── */
+/* ── Loading / error screen ── */
 .loading-screen {
   display: flex;
   flex-direction: column;
@@ -555,17 +555,31 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   min-height: 100vh;
   gap: 14px;
   background: var(--bg);
+  padding: 24px;
 }
 .spinner {
-  width: 38px;
-  height: 38px;
-  border: 3px solid var(--border);
+  width: 44px;
+  height: 44px;
+  border: 4px solid var(--border);
   border-top-color: var(--g-accent);
   border-radius: 50%;
   animation: spin .7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-.loading-text { font-size: 0.88rem; color: var(--text-muted); }
+.loading-text { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+.loading-sub  { font-size: 0.82rem; color: var(--text-muted); margin-top: -6px; }
+.error-title  { font-size: 1.2rem; font-weight: 800; color: var(--red); }
+.error-msg    {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  max-width: 380px;
+  text-align: center;
+  line-height: 1.6;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+}
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
