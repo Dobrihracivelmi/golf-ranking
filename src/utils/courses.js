@@ -21,7 +21,7 @@ const COURSES = [
   { name: 'Gray Bear - Tále',                             white: -7,  yellow: -4  },
   { name: 'Green Meadows - Ivanka pri Nitre',             white: null, yellow: 10  },
   { name: 'Green Resort Hrubá Borša',                     white: -3,  yellow:  1  },
-  { name: 'Hainburg',                                     white:  0,  yellow:  0  },
+  { name: 'Hainburg',                                     white: -2,  yellow:  0  },
   { name: 'Penati Golf Resort - Heritage',                white: -5,  yellow: -3  },
   { name: 'Penati Golf Resort - Legend (72)',              white: -8,  yellow: -4  },
   { name: 'Penati Golf Resort - Legend (73)',              white: -9,  yellow: -5  },

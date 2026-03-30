@@ -58,7 +58,7 @@ export default function AddRound({ onAdd, onTabChange }) {
     const errs = {}
     if (!date)       errs.date   = 'Dátum je povinný'
     if (!courseName) errs.course = 'Vyberte ihrisko'
-    if (!tee)        errs.tee    = 'Vyberte odpaliskoté'
+    if (!tee)        errs.tee    = 'Vyberte odpalisko'
 
     let filled = 0
     players.forEach((p, i) => {
@@ -146,10 +146,10 @@ export default function AddRound({ onAdd, onTabChange }) {
           {errors.course && <span className="err-msg">{errors.course}</span>}
         </div>
 
-        {/* Odpaliskoté (tee) — shown only after a course is selected */}
+        {/* Odpalisko (tee) — shown only after a course is selected */}
         {selectedCourse && (
           <div className="form-group">
-            <label className="form-label">Odpaliskoté</label>
+            <label className="form-label">Odpalisko</label>
             <div className="tee-buttons">
               {availableTees.map(t => (
                 <button
