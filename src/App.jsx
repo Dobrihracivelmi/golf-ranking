@@ -1,53 +1,54 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import RankingTable from './components/RankingTable'
 import AddRound from './components/AddRound'
 import History from './components/History'
 import CaptainPanel from './components/CaptainPanel'
-import { DEFAULT_CAPTAIN_CATEGORIES } from './utils/ranking'
-
-const STORAGE_KEY = 'golfGroupData'
-
-function loadData() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    const parsed = raw ? JSON.parse(raw) : {}
-    return {
-      rounds:            parsed.rounds            || [],
-      captainCategories: parsed.captainCategories || DEFAULT_CAPTAIN_CATEGORIES,
-      captainAwards:     parsed.captainAwards     || [],
-    }
-  } catch {
-    return { rounds: [], captainCategories: DEFAULT_CAPTAIN_CATEGORIES, captainAwards: [] }
-  }
-}
+import { useAppData } from './useAppData'
 
 export default function App() {
-  const [tab, setTab] = useState('ranking')
-  const [data, setData] = useState(loadData)
+  const {
+    data,
+    loading,
+    error,
+    addRound,
+    deleteRound,
+    addCaptainAward,
+    addCaptainCategory,
+    editCaptainCategory,
+    deleteCaptainCategory,
+  } = useAppData()
 
-  // Captain auth state (not persisted — cleared on refresh)
+  const [tab, setTab] = useState('ranking')
+
+  // Captain auth state (session-only, not persisted)
   const [captainModalOpen, setCaptainModalOpen] = useState(false)
   const [captainAuth,      setCaptainAuth]      = useState(false)
   const [captainPanelOpen, setCaptainPanelOpen] = useState(false)
   const [pwInput,          setPwInput]          = useState('')
   const [pwError,          setPwError]          = useState(false)
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-  }, [data])
-
-  const addRound = (round) => {
-    setData(prev => ({
-      ...prev,
-      rounds: [...prev.rounds, { ...round, id: `${Date.now()}-${Math.random().toString(36).slice(2)}` }],
-    }))
+  // ── Loading / error screens ───────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="loading-screen">
+        <div className="spinner" />
+        <p className="loading-text">Načítavam dáta…</p>
+      </div>
+    )
   }
 
-  const deleteRound = (id) => {
-    setData(prev => ({ ...prev, rounds: prev.rounds.filter(r => r.id !== id) }))
+  if (error) {
+    return (
+      <div className="loading-screen">
+        <div className="empty-icon">⚠️</div>
+        <h2 style={{ color: 'var(--red)', marginBottom: 8 }}>Chyba pripojenia</h2>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', maxWidth: 320, textAlign: 'center' }}>
+          Nepodarilo sa pripojiť k databáze. Skontrolujte internetové pripojenie alebo konfiguráciu Firebase.<br /><br />
+          <code style={{ fontSize: '0.8rem', color: 'var(--g-accent)' }}>{error}</code>
+        </p>
+      </div>
+    )
   }
-
-  const getCourses = () => Array.from(new Set(data.rounds.map(r => r.course).filter(Boolean)))
 
   // ── Captain handlers ──────────────────────────────────────────────────────
   const handleCrownClick = () => {
@@ -73,29 +74,10 @@ export default function App() {
     }
   }
 
-  const addCaptainAward = (award) => {
-    setData(prev => ({ ...prev, captainAwards: [...prev.captainAwards, award] }))
-  }
+  const getCourses = () =>
+    Array.from(new Set(data.rounds.map(r => r.course).filter(Boolean)))
 
-  const addCaptainCategory = (cat) => {
-    setData(prev => ({ ...prev, captainCategories: [...prev.captainCategories, cat] }))
-  }
-
-  const editCaptainCategory = (cat) => {
-    setData(prev => ({
-      ...prev,
-      captainCategories: prev.captainCategories.map(c => c.id === cat.id ? cat : c),
-    }))
-  }
-
-  const deleteCaptainCategory = (id) => {
-    setData(prev => ({
-      ...prev,
-      captainCategories: prev.captainCategories.filter(c => c.id !== id),
-    }))
-  }
   // ─────────────────────────────────────────────────────────────────────────
-
   const tabs = [
     { id: 'ranking', label: 'Rebríček',    icon: '🏆' },
     { id: 'add',     label: 'Pridať kolo', icon: '➕' },

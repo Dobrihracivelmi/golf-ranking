@@ -546,6 +546,27 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .empty-state p { font-size: 0.9rem; }
 .empty-state em { color: var(--g-accent); font-style: normal; font-weight: 600; }
 
+/* ── Loading screen ── */
+.loading-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 14px;
+  background: var(--bg);
+}
+.spinner {
+  width: 38px;
+  height: 38px;
+  border: 3px solid var(--border);
+  border-top-color: var(--g-accent);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { font-size: 0.88rem; color: var(--text-muted); }
+
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
