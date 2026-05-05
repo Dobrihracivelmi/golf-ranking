@@ -1,8 +1,11 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import RankingTable from './components/RankingTable'
 import AddRound from './components/AddRound'
 import History from './components/History'
 import CaptainPanel from './components/CaptainPanel'
+import H2HTab from './components/H2HTab'
+import CoursesTab from './components/CoursesTab'
+import ChallengesTab from './components/ChallengesTab'
 import { useAppData } from './useAppData'
 
 export default function App() {
@@ -15,14 +18,38 @@ export default function App() {
     addRound,
     deleteRound,
     addCaptainAward,
+    deleteCaptainAward,
     addCaptainCategory,
     editCaptainCategory,
     deleteCaptainCategory,
+    addChallenge,
+    updateChallenge,
+    deleteChallenge,
+    setClaudeApiKey,
+    restoreData,
   } = useAppData()
 
   console.log('[App] loading:', loading, '| error:', error, '| data:', data ? 'present' : 'null')
 
   const [tab, setTab] = useState('ranking')
+
+  // Tab scroll-fade indicators
+  const navRef     = useRef(null)
+  const wrapperRef = useRef(null)
+  const updateFade = useCallback(() => {
+    const el = navRef.current
+    const wr = wrapperRef.current
+    if (!el || !wr) return
+    const canScrollLeft  = el.scrollLeft > 2
+    const canScrollRight = el.scrollLeft + el.clientWidth < el.scrollWidth - 2
+    wr.classList.toggle('fade-left',  canScrollLeft)
+    wr.classList.toggle('fade-right', canScrollRight)
+  }, [])
+  useEffect(() => { updateFade() }, [tab, updateFade])
+  useEffect(() => {
+    window.addEventListener('resize', updateFade)
+    return () => window.removeEventListener('resize', updateFade)
+  }, [updateFade])
 
   // Captain auth state (session-only, not persisted)
   const [captainModalOpen, setCaptainModalOpen] = useState(false)
@@ -72,13 +99,17 @@ export default function App() {
   console.log('[App] rendering main UI, tab:', tab)
 
   // ── Captain handlers ──────────────────────────────────────────────────────
+  const openCaptainLogin = () => {
+    setPwInput('')
+    setPwError(false)
+    setCaptainModalOpen(true)
+  }
+
   const handleCrownClick = () => {
     if (captainAuth) {
       setCaptainPanelOpen(true)
     } else {
-      setPwInput('')
-      setPwError(false)
-      setCaptainModalOpen(true)
+      openCaptainLogin()
     }
   }
 
@@ -100,6 +131,9 @@ export default function App() {
     { id: 'ranking', label: 'Rebríček',    icon: '🏆' },
     { id: 'add',     label: 'Pridať kolo', icon: '➕' },
     { id: 'history', label: 'História',    icon: '📋' },
+    { id: 'h2h',     label: 'H2H',         icon: '🤺' },
+    { id: 'challenges', label: 'Výzvy',   icon: '⚔️' },
+    { id: 'courses', label: 'Ihriská',    icon: '⛳' },
   ]
 
   return (
@@ -121,28 +155,49 @@ export default function App() {
         </div>
       </header>
 
-      <nav className="tab-nav">
-        {tabs.map(t => (
-          <button
-            key={t.id}
-            className={`tab-btn${tab === t.id ? ' tab-active' : ''}`}
-            onClick={() => setTab(t.id)}
-          >
-            <span className="tab-icon">{t.icon}</span>
-            <span className="tab-label">{t.label}</span>
-          </button>
-        ))}
-      </nav>
+      <div className="tab-nav-wrapper" ref={wrapperRef}>
+        <nav className="tab-nav" ref={navRef} onScroll={updateFade}>
+          {tabs.map(t => (
+            <button
+              key={t.id}
+              className={`tab-btn${tab === t.id ? ' tab-active' : ''}`}
+              onClick={() => setTab(t.id)}
+            >
+              <span className="tab-icon">{t.icon}</span>
+              <span className="tab-label">{t.label}</span>
+            </button>
+          ))}
+        </nav>
+      </div>
 
       <main className="site-main">
         {tab === 'ranking' && (
-          <RankingTable rounds={data.rounds} captainAwards={data.captainAwards} />
+          <RankingTable rounds={data.rounds} captainAwards={data.captainAwards} h2hAdjustments={data.h2hAdjustments} challenges={data.challenges} />
         )}
         {tab === 'add' && (
-          <AddRound onAdd={addRound} onTabChange={setTab} />
+          <AddRound onAdd={addRound} onTabChange={setTab} captainAuth={captainAuth} challenges={data.challenges} onUpdateChallenge={updateChallenge} />
         )}
         {tab === 'history' && (
-          <History rounds={data.rounds} onDelete={deleteRound} />
+          <History
+            rounds={data.rounds}
+            onDelete={deleteRound}
+            captainAuth={captainAuth}
+            onRequestAuth={openCaptainLogin}
+          />
+        )}
+        {tab === 'h2h' && (
+          <H2HTab rounds={data.rounds} captainAwards={data.captainAwards} h2hAdjustments={data.h2hAdjustments} challenges={data.challenges} />
+        )}
+        {tab === 'challenges' && (
+          <ChallengesTab
+            challenges={data.challenges}
+            captainAuth={captainAuth}
+            onAdd={addChallenge}
+            onDelete={deleteChallenge}
+          />
+        )}
+        {tab === 'courses' && (
+          <CoursesTab rounds={data.rounds} />
         )}
       </main>
 
@@ -184,10 +239,15 @@ export default function App() {
             <CaptainPanel
               categories={data.captainCategories}
               awards={data.captainAwards}
+              rounds={data.rounds}
               onAddAward={addCaptainAward}
+              onDeleteAward={deleteCaptainAward}
               onAddCategory={addCaptainCategory}
               onEditCategory={editCaptainCategory}
               onDeleteCategory={deleteCaptainCategory}
+              onRestore={restoreData}
+              claudeApiKey={data.claudeApiKey}
+              onSetClaudeApiKey={setClaudeApiKey}
             />
           </div>
         </div>

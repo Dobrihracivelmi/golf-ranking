@@ -1,5 +1,6 @@
+// One-time migration: set h2hAdjustments for Maso (-1) and FF (+1)
 import { initializeApp } from 'firebase/app'
-import { getFirestore } from 'firebase/firestore'
+import { getFirestore, doc, updateDoc } from 'firebase/firestore'
 
 const firebaseConfig = {
   apiKey:            'AIzaSyAB7WNY2CApH4k3sUKGq99SpE5NxoiOsu4',
@@ -11,4 +12,15 @@ const firebaseConfig = {
 }
 
 const app = initializeApp(firebaseConfig)
-export const db = getFirestore(app)
+const db = getFirestore(app)
+
+const ref = doc(db, 'golf', 'appData')
+await updateDoc(ref, {
+  h2hAdjustments: {
+    'Maso': -1,
+    'FF': 1,
+  },
+})
+
+console.log('Done: h2hAdjustments set — Maso: -1, FF: +1')
+process.exit(0)

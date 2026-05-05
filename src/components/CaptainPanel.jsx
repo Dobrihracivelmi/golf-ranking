@@ -4,10 +4,15 @@ import { ALL_PLAYERS, fmtDate } from '../utils/ranking'
 export default function CaptainPanel({
   categories,
   awards,
+  rounds,
   onAddAward,
   onAddCategory,
   onEditCategory,
   onDeleteCategory,
+  onDeleteAward,
+  onRestore,
+  claudeApiKey,
+  onSetClaudeApiKey,
 }) {
   const [activeTab, setActiveTab] = useState('award')
 
@@ -18,6 +23,10 @@ export default function CaptainPanel({
   const [reason,           setReason]           = useState('')
   const [awardSaved,       setAwardSaved]       = useState(false)
   const [awardErrors,      setAwardErrors]      = useState({})
+
+  // ── API key state ─────────────────────────────────────────────────────────
+  const [apiKeyInput, setApiKeyInput] = useState(claudeApiKey || '')
+  const [apiKeySaved, setApiKeySaved] = useState(false)
 
   // ── Category form state ───────────────────────────────────────────────────
   const [showCatForm,  setShowCatForm]  = useState(false)
@@ -134,6 +143,12 @@ export default function CaptainPanel({
           onClick={() => setActiveTab('categories')}
         >
           🗂 Kategórie
+        </button>
+        <button
+          className={`cpanel-tab${activeTab === 'backup' ? ' cpanel-tab-active' : ''}`}
+          onClick={() => setActiveTab('backup')}
+        >
+          💾 Záloha
         </button>
       </div>
 
@@ -275,6 +290,15 @@ export default function CaptainPanel({
                     <span className={`ai-pts ${award.points > 0 ? 'pos' : 'neg'}`}>
                       {award.points > 0 ? `+${award.points}` : award.points}
                     </span>
+                    <button
+                      className="ai-delete"
+                      onClick={() => {
+                        if (window.confirm(`Zmazať body: ${award.categoryEmoji} ${award.categoryName} pre ${award.playerName}?`)) {
+                          onDeleteAward(award.id)
+                        }
+                      }}
+                      title="Zmazať"
+                    >🗑</button>
                   </div>
                 ))}
               </div>
@@ -373,6 +397,103 @@ export default function CaptainPanel({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Backup tab ── */}
+      {activeTab === 'backup' && (
+        <div className="cpanel-backup">
+          <div className="backup-section">
+            <h3 className="section-title-sm">📥 Zálohovať dáta</h3>
+            <p className="backup-desc">Stiahne JSON súbor so všetkými dátami (kolá, body, kategórie).</p>
+            <button
+              className="submit-btn"
+              onClick={() => {
+                const payload = {
+                  rounds:            rounds || [],
+                  captainAwards:     awards || [],
+                  captainCategories: categories || [],
+                  exportedAt:        new Date().toISOString(),
+                }
+                const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+                const url  = URL.createObjectURL(blob)
+                const a    = document.createElement('a')
+                const date = new Date().toISOString().split('T')[0]
+                a.href     = url
+                a.download = `golf-zaloha-${date}.json`
+                a.click()
+                URL.revokeObjectURL(url)
+              }}
+            >
+              📥 Zálohovať dáta
+            </button>
+          </div>
+
+          <div className="backup-section">
+            <h3 className="section-title-sm">📤 Obnoviť zo zálohy</h3>
+            <p className="backup-desc">Nahrá dáta z predtým exportovaného JSON súboru. Prepíše všetky aktuálne dáta.</p>
+            <label className="submit-btn backup-upload-btn">
+              📤 Obnoviť zo zálohy
+              <input
+                type="file"
+                accept=".json"
+                style={{ display: 'none' }}
+                onChange={e => {
+                  const file = e.target.files?.[0]
+                  if (!file) return
+                  const reader = new FileReader()
+                  reader.onload = (evt) => {
+                    try {
+                      const parsed = JSON.parse(evt.target.result)
+                      if (!Array.isArray(parsed.rounds) || !Array.isArray(parsed.captainAwards) || !Array.isArray(parsed.captainCategories)) {
+                        alert('Neplatný formát zálohy. Súbor musí obsahovať rounds, captainAwards a captainCategories.')
+                        return
+                      }
+                      if (window.confirm(
+                        `Naozaj chceš obnoviť dáta?\n\n` +
+                        `Záloha obsahuje ${parsed.rounds.length} kôl, ${parsed.captainAwards.length} bodov, ${parsed.captainCategories.length} kategórií.\n\n` +
+                        `Toto prepíše všetky aktuálne dáta.`
+                      )) {
+                        onRestore(parsed)
+                      }
+                    } catch {
+                      alert('Chyba pri čítaní súboru. Uistite sa, že ide o platný JSON.')
+                    }
+                  }
+                  reader.readAsText(file)
+                  e.target.value = ''
+                }}
+              />
+            </label>
+          </div>
+
+          <div className="backup-section">
+            <h3 className="section-title-sm">🤖 AI Komentátor (Claude API)</h3>
+            <p className="backup-desc">Zadajte Anthropic API kľúč pre automatické generovanie komentárov po každom kole.</p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="password"
+                className="form-input"
+                value={apiKeyInput}
+                onChange={e => { setApiKeyInput(e.target.value); setApiKeySaved(false) }}
+                placeholder="sk-ant-api03-..."
+                style={{ flex: 1 }}
+              />
+              <button
+                className={`submit-btn${apiKeySaved ? ' submit-saved' : ''}`}
+                style={{ whiteSpace: 'nowrap' }}
+                disabled={apiKeySaved}
+                onClick={() => {
+                  onSetClaudeApiKey(apiKeyInput.trim())
+                  setApiKeySaved(true)
+                  setTimeout(() => setApiKeySaved(false), 1500)
+                }}
+              >
+                {apiKeySaved ? '✓' : 'Uložiť'}
+              </button>
+            </div>
+            {claudeApiKey && <p className="backup-desc" style={{ marginTop: 6, color: '#3ecf80' }}>✓ API kľúč je nastavený</p>}
+          </div>
         </div>
       )}
     </div>
