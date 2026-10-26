@@ -58,7 +58,7 @@ function Rules() {
         <div className="rules-body">
           <h3 className="rules-heading">Ako sa počíta celkové skóre</h3>
           <p>Čím nižšie skóre, tým lepšie — ako v golfe.</p>
-          <p className="rules-formula">Finálne skóre = Rany − H2H body − Kapitánske body − LD/NP body − Body za výzvy</p>
+          <p className="rules-formula">Finálne skóre = Rany − H2H body − LD/NP body − Kapitánske body − Výzvové body + Penalta za neaktivitu</p>
 
           <h3 className="rules-heading">🏌️ Rany (základ)</h3>
           <p>Vždy sa berú posledné 3 kolá. Ak si odohral len 1 kolo, násobí sa ×3. Ak 2 kolá, vypočíta sa priemer ×3. Od 3 kôl vyššie sa berie súčet posledných troch. Skóre sa upravuje podľa náročnosti ihriska a odpaliska — v tabuľke vidíš surové rany aj upravené v zátvorkách.</p>
@@ -81,15 +81,18 @@ function Rules() {
           </p>
 
           <h3 className="rules-heading">⚔️ Výzvy</h3>
-          <p>Hráč môže vyzvať až 3 súperov naraz na priamy súboj. Výzva má platnosť 14 dní. Ak vyzvaný hráč výzvu nesplní a tá expiruje, dostane -2 body do celkového skóre. Výzvy zadáva len kapitán Bekis.</p>
+          <p>Hráč môže vyzvať až 3 súperov naraz na priamy súboj. Výzva má platnosť 14 dní. Výzvy zadáva len kapitán Bekis. Ak vyhrá vyššie postavený hráč: +1 víťaz, −1 porazený. Ak vyhrá nižšie postavený hráč (upset): +2 víťaz, −2 porazený.</p>
+
+          <h3 className="rules-heading">💤 Penalta za neaktivitu</h3>
+          <p>Ak hráč neodohral kolo viac ako 30 dní, dostane penaltu −3 body. Za každých ďalších 30 dní neaktivity sa pridáva ďalšia penalta −3. Odohraním nového kola sa penalta zruší.</p>
         </div>
       )}
     </div>
   )
 }
 
-export default function RankingTable({ rounds, captainAwards = [], h2hAdjustments = {}, challenges = [] }) {
-  const { ranked, unranked } = calculateRankings(rounds, captainAwards, h2hAdjustments, challenges)
+export default function RankingTable({ rounds, captainAwards = [], h2hAdjustments = {}, challenges = [], h2hPointsStored = null, challengePointsStored = {} }) {
+  const { ranked, unranked } = calculateRankings(rounds, captainAwards, h2hAdjustments, challenges, h2hPointsStored, challengePointsStored)
   const awardMap = buildAwardMap(captainAwards)
 
   const rankMap = {}
@@ -124,12 +127,12 @@ export default function RankingTable({ rounds, captainAwards = [], h2hAdjustment
                 <th>Kolo 2</th>
                 <th>Kolo 3</th>
                 <th title="Normalizovaný 3-kolový súčet (upravené rany)">Rany</th>
-                <th title="Súčet úprav za posledné 3 kolá">Úprava</th>
                 <th title="H2H bonus za upset">H2H</th>
                 <th title="Longest Drive + Nearest to Pin body">🏌️📍</th>
-                <th title="Body za výzvy (penalizácia za expiráciu)">⚔️ Výzvy</th>
+                <th title="Výzvové body">⚔️ Výzvy</th>
                 <th title="Kapitánske body">👑 Kapitán</th>
-                <th title="Výsledok = Rany − H2H − Kapitán">Výsledok</th>
+                <th title="Penalta za neaktivitu">💤</th>
+                <th title="Výsledok = Rany − H2H − LD/NP − Kapitán − Výzvy + Neaktivita">Výsledok</th>
               </tr>
             </thead>
             <tbody>
@@ -166,13 +169,6 @@ export default function RankingTable({ rounds, captainAwards = [], h2hAdjustment
 
                   <td className="td-stroke">{fmtScore(player.strokeScore)}</td>
 
-                  <td className={`td-adj ${player.totalAdjustment < 0 ? 'pos' : player.totalAdjustment > 0 ? 'neg' : ''}`}>
-                    {player.totalAdjustment === 0
-                      ? '—'
-                      : player.totalAdjustment > 0
-                        ? `+${player.totalAdjustment}`
-                        : player.totalAdjustment}
-                  </td>
 
                   <td className={`td-h2h ${player.h2hPoints > 0 ? 'pos' : player.h2hPoints < 0 ? 'neg' : ''}`}>
                     {player.h2hPoints > 0 ? `+${player.h2hPoints}` : player.h2hPoints || '0'}
@@ -192,21 +188,26 @@ export default function RankingTable({ rounds, captainAwards = [], h2hAdjustment
                     )}
                   </td>
 
-                  <td className={`td-challenge ${player.challengePoints < 0 ? 'neg' : ''}`}>
-                    {player.challengePoints < 0
-                      ? player.challengePoints
-                      : <span className="no-data">—</span>}
+                  <td className={`td-challenge ${player.challengePoints > 0 ? 'pos' : player.challengePoints < 0 ? 'neg' : ''}`}>
+                    {player.challengePoints > 0
+                      ? `+${player.challengePoints}`
+                      : player.challengePoints < 0
+                        ? player.challengePoints
+                        : <span className="no-data">—</span>}
                   </td>
 
                   <td className="td-captain">
-                    {player.captainPoints === 0 && !awardMap[player.name] ? (
+                    {player.captainPoints === 0 ? (
                       <span className="no-data">—</span>
                     ) : (
                       <>
-                        <span className={`cap-total ${player.captainPoints > 0 ? 'pos' : player.captainPoints < 0 ? 'neg' : ''}`}>
+                        <span className={`cap-total ${player.captainPoints > 0 ? 'pos' : 'neg'}`}>
                           {player.captainPoints > 0 ? `+${player.captainPoints}` : player.captainPoints}
                         </span>
-                        {(awardMap[player.name] || []).map(a => (
+                        {(awardMap[player.name] || []).filter(a => {
+                          const dates = player.lastRounds.map(r => r.date).sort()
+                          return a.date && dates.length > 0 && a.date >= dates[0]
+                        }).map(a => (
                           <div key={a.id} className="cap-award-line">
                             <span className="cap-award-emoji">{a.categoryEmoji}</span>
                             <span className="cap-award-name">{a.categoryName}</span>
@@ -217,6 +218,12 @@ export default function RankingTable({ rounds, captainAwards = [], h2hAdjustment
                         ))}
                       </>
                     )}
+                  </td>
+
+                  <td className={`td-inactivity ${player.inactivityPoints < 0 ? 'neg' : ''}`}>
+                    {player.inactivityPoints < 0
+                      ? player.inactivityPoints
+                      : <span className="no-data">—</span>}
                   </td>
 
                   <td className="td-final">{fmtScore(player.finalScore)}</td>
@@ -241,15 +248,11 @@ export default function RankingTable({ rounds, captainAwards = [], h2hAdjustment
       <div className="legend">
         <span>Rany = súčet upravených skóre za posledné 3 kolá</span>
         <span className="legend-sep">·</span>
-        <span>Úprava = súčet korekcií ihrísk (záporné = ľahšie)</span>
-        <span className="legend-sep">·</span>
         <span>H2H = bonus za upset</span>
         <span className="legend-sep">·</span>
         <span>🏌️📍 = Longest Drive + Nearest to Pin (+1 každý)</span>
         <span className="legend-sep">·</span>
-        <span>⚔️ = penalizácia za expirované výzvy (−2 za každú)</span>
-        <span className="legend-sep">·</span>
-        <span>Výsledok = Rany − H2H − 🏌️📍 − Výzvy − Kapitán (nižšie je lepšie)</span>
+        <span>Výsledok = Rany − H2H − 🏌️📍 − Kapitán − Výzvy + 💤 (nižšie je lepšie)</span>
       </div>
 
       <Rules />

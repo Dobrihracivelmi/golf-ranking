@@ -44,7 +44,7 @@ function buildEncounters(rounds, p1, p2, rankMap) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function H2HTab({ rounds, captainAwards, h2hAdjustments = {}, challenges = [] }) {
+export default function H2HTab({ rounds, captainAwards, h2hAdjustments = {}, challenges = [], h2hPointsStored = null, challengePointsStored = {} }) {
   const [p1, setP1] = useState('')
   const [p2, setP2] = useState('')
 
@@ -53,7 +53,7 @@ export default function H2HTab({ rounds, captainAwards, h2hAdjustments = {}, cha
     .sort((a, b) => a.localeCompare(b, 'sk'))
 
   // Need ranks for H2H points calculation
-  const { ranked } = calculateRankings(rounds, captainAwards, h2hAdjustments, challenges)
+  const { ranked } = calculateRankings(rounds, captainAwards, h2hAdjustments, challenges, h2hPointsStored, challengePointsStored)
   const rankMap = {}
   ranked.forEach((p, i) => { rankMap[p.name] = i + 1 })
 

@@ -16,31 +16,116 @@ export const DEFAULT_CAPTAIN_CATEGORIES = [
   { id: 'def-9', name: 'Nearest to the Pin',  emoji: '📍', points:  1 },
 ]
 
-// Helper: compute stroke-based rank map from a set of rounds
+// Stroke-only rank map (used by History component)
 export function strokeRankMap(rnds) {
-  const pm = {}
+  const scores = {}
   for (const r of rnds) {
     for (const p of r.players) {
-      if (!pm[p.name]) pm[p.name] = []
-      pm[p.name].push({ date: r.date, adj: p.adjustedStrokes ?? p.strokes })
+      if (!scores[p.name]) scores[p.name] = []
+      scores[p.name].push({ date: r.date, adj: p.adjustedStrokes ?? p.strokes })
     }
   }
-  for (const n in pm) pm[n].sort((a, b) => new Date(b.date) - new Date(a.date))
-
-  const sc = {}
-  for (const n in pm) {
-    const s = pm[n].slice(0, 3).map(r => r.adj)
-    sc[n] = s.length === 1 ? s[0] * 3
-          : s.length === 2 ? ((s[0] + s[1]) / 2) * 3
-          : s[0] + s[1] + s[2]
+  for (const n in scores) scores[n].sort((a, b) => new Date(b.date) - new Date(a.date))
+  const totals = {}
+  for (const n in scores) {
+    const s = scores[n].slice(0, 3).map(r => r.adj)
+    totals[n] = s.length === 1 ? s[0] * 3
+              : s.length === 2 ? ((s[0] + s[1]) / 2) * 3
+              : s[0] + s[1] + s[2]
   }
-  const sorted = Object.keys(sc).sort((a, b) => sc[a] - sc[b])
+  const sorted = Object.keys(totals).sort((a, b) => totals[a] - totals[b])
   const rm = {}
   sorted.forEach((n, i) => { rm[n] = i + 1 })
   return rm
 }
 
-export function calculateRankings(rounds, captainAwards = [], h2hAdjustments = {}, challenges = []) {
+// Apply H2H rule to a single pair of players.
+// Winner = fewer adjusted strokes. If winner was worse-ranked (higher rank number),
+// winner gains (winnerRank − loserRank) and loser loses the same. Otherwise: 0.
+function h2hPair(winner, loser, preRankMap, out) {
+  const winnerRank = preRankMap[winner.name]
+  const loserRank  = preRankMap[loser.name]
+  if (winnerRank > loserRank) {
+    const pts = winnerRank - loserRank
+    out[winner.name] = (out[winner.name] || 0) + pts
+    out[loser.name]  = (out[loser.name]  || 0) - pts
+  }
+}
+
+// Compute H2H delta for a single new round.
+// Pre-round ranks come from calculateRankings with all the same inputs as
+// the live VÝSLEDOK column, so the rank used is always what the player sees.
+// Returns { delta, preRankMap }.
+export function computeH2HDeltaForNewRound(
+  existingRounds, newRound, currentH2H, captainAwards = [],
+  h2hAdjustments = {}, challenges = [], challengePointsStored = {}
+) {
+  const { ranked } = calculateRankings(
+    existingRounds, captainAwards, h2hAdjustments, challenges, currentH2H, challengePointsStored
+  )
+  const preRankMap = {}
+  ranked.forEach((p, i) => { preRankMap[p.name] = i + 1 })
+
+  const delta = {}
+  const participants = newRound.players.filter(p => preRankMap[p.name] != null)
+
+  for (let i = 0; i < participants.length; i++) {
+    for (let j = i + 1; j < participants.length; j++) {
+      const a = participants[i]
+      const b = participants[j]
+      const aStrokes = a.adjustedStrokes ?? a.strokes
+      const bStrokes = b.adjustedStrokes ?? b.strokes
+      if (aStrokes === bStrokes) continue // tie → no points
+      const [winner, loser] = aStrokes < bStrokes ? [a, b] : [b, a]
+      h2hPair(winner, loser, preRankMap, delta)
+    }
+  }
+
+  return { delta, preRankMap }
+}
+
+// Compute cumulative H2H points from scratch across all rounds in order.
+// Used only by the migration script — not called at runtime when h2hPointsStored is populated.
+export function computeAllH2HPoints(rounds, captainAwards = [], h2hAdjustments = {}, challenges = []) {
+  const roundsChron = [...rounds].sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date)
+    return (a.id || '').localeCompare(b.id || '')
+  })
+
+  const cumulative = {}
+  for (const round of rounds) {
+    for (const p of round.players) {
+      if (cumulative[p.name] == null) cumulative[p.name] = 0
+    }
+  }
+
+  for (let ri = 0; ri < roundsChron.length; ri++) {
+    const round = roundsChron[ri]
+    // Pass a snapshot of cumulative so calculateRankings uses the stored-H2H path
+    const { ranked } = calculateRankings(
+      roundsChron.slice(0, ri), captainAwards, h2hAdjustments, challenges, { ...cumulative }
+    )
+    const preRankMap = {}
+    ranked.forEach((p, i) => { preRankMap[p.name] = i + 1 })
+
+    const participants = round.players.filter(p => preRankMap[p.name] != null)
+    for (let i = 0; i < participants.length; i++) {
+      for (let j = i + 1; j < participants.length; j++) {
+        const a = participants[i]
+        const b = participants[j]
+        const aStrokes = a.adjustedStrokes ?? a.strokes
+        const bStrokes = b.adjustedStrokes ?? b.strokes
+        if (aStrokes === bStrokes) continue
+        const [winner, loser] = aStrokes < bStrokes ? [a, b] : [b, a]
+        h2hPair(winner, loser, preRankMap, cumulative)
+      }
+    }
+  }
+
+  return cumulative
+}
+
+export function calculateRankings(rounds, captainAwards = [], h2hAdjustments = {}, challenges = [], h2hPointsStored = null, challengePointsStored = {}) {
   // Build per-player list of rounds with adjusted strokes, sorted newest first
   const playerRoundsMap = {}
   for (const round of rounds) {
@@ -77,47 +162,15 @@ export function calculateRankings(rounds, captainAwards = [], h2hAdjustments = {
     }
   }
 
-  // Rank by stroke score (lower = better = rank 1)
-  const sortedByStroke = Object.keys(strokeScores).sort(
-    (a, b) => strokeScores[a] - strokeScores[b]
-  )
-  const rankMap = {}
-  sortedByStroke.forEach((name, i) => { rankMap[name] = i + 1 })
-
-  // H2H: use pre-round rankings so upset bonuses are based on standings
-  // BEFORE the round was played, not after.
-  const roundsChron = [...rounds].sort((a, b) => {
-    if (a.date !== b.date) return a.date.localeCompare(b.date)
-    return (a.id || '').localeCompare(b.id || '')
-  })
-
-  const h2hPoints = {}
-  for (const name in playerRoundsMap) h2hPoints[name] = 0
-
-  for (let ri = 0; ri < roundsChron.length; ri++) {
-    const round = roundsChron[ri]
-    // Ranks based on all rounds played before this one
-    const preRankMap = strokeRankMap(roundsChron.slice(0, ri))
-
-    const rp = round.players.filter(p => preRankMap[p.name] != null)
-    for (let i = 0; i < rp.length; i++) {
-      for (let j = i + 1; j < rp.length; j++) {
-        const a = rp[i], b = rp[j]
-        const aAdj = a.adjustedStrokes ?? a.strokes
-        const bAdj = b.adjustedStrokes ?? b.strokes
-        if (aAdj === bAdj) continue
-
-        const [winner, loser] = aAdj < bAdj ? [a, b] : [b, a]
-        const winnerRank = preRankMap[winner.name]
-        const loserRank  = preRankMap[loser.name]
-
-        if (winnerRank > loserRank) {
-          const diff = winnerRank - loserRank
-          h2hPoints[winner.name] += diff
-          h2hPoints[loser.name]  -= diff
-        }
-      }
+  // H2H: use stored values if populated, otherwise compute from scratch (fallback)
+  let h2hPoints
+  if (h2hPointsStored && Object.keys(h2hPointsStored).length > 0) {
+    h2hPoints = {}
+    for (const name in playerRoundsMap) {
+      h2hPoints[name] = h2hPointsStored[name] || 0
     }
+  } else {
+    h2hPoints = computeAllH2HPoints(rounds, captainAwards)
   }
 
   // Apply manual H2H adjustments
@@ -173,32 +226,61 @@ export function calculateRankings(rounds, captainAwards = [], h2hAdjustments = {
     }
   }
 
-  // Challenge penalty points: -2 for each challenged player on expired challenges
+  // Challenge bonus points — two sources:
+  // 1) Completed (fulfilled/failed) challenges with stored rank data
+  //    Higher-ranked wins: +1 winner, -1 loser
+  //    Lower-ranked wins:  +2 winner, -2 loser
+  // 2) Expired challenges resolved manually by captain (expiredResolution)
+  //    Stores explicit plusPlayer (+1) and minusPlayer (-1)
   const challengePointsMap = {}
   for (const name in playerRoundsMap) challengePointsMap[name] = 0
-  const today = new Date().toISOString().split('T')[0]
   for (const ch of challenges) {
-    // Only penalise expired challenges (pending ones that passed their expiry)
-    if (ch.status === 'fulfilled' || ch.status === 'failed') continue
-    const expiry = ch.expiry || (() => {
-      const d = new Date(ch.date + 'T00:00:00')
-      d.setDate(d.getDate() + 14)
-      return d.toISOString().split('T')[0]
-    })()
-    if (expiry >= today) continue // not expired yet
-    // Each challenged player gets -2
-    for (const name of ch.challenged) {
-      if (challengePointsMap[name] != null) challengePointsMap[name] -= 2
+    // Source 1: completed challenges
+    if (ch.resolvedDate && (ch.status === 'fulfilled' || ch.status === 'failed')) {
+      const crRank = ch.challengerRank
+      for (let ci = 0; ci < ch.challenged.length; ci++) {
+        const cName = ch.challenged[ci]
+        const cdRank = ch.challengedRanks?.[ci]
+        if (crRank == null || cdRank == null) continue
+        if (challengePointsMap[ch.challenger] == null || challengePointsMap[cName] == null) continue
+        if (ch.status === 'fulfilled') {
+          const pts = crRank < cdRank ? 1 : 2
+          challengePointsMap[ch.challenger] += pts
+          challengePointsMap[cName] -= pts
+        } else {
+          const pts = cdRank < crRank ? 1 : 2
+          challengePointsMap[cName] += pts
+          challengePointsMap[ch.challenger] -= pts
+        }
+      }
+    }
+    // Source 2: expired challenges with manual captain resolution
+    if (ch.expiredResolution) {
+      const { plusPlayer, minusPlayer } = ch.expiredResolution
+      if (plusPlayer && challengePointsMap[plusPlayer] != null) challengePointsMap[plusPlayer] += 1
+      if (minusPlayer && challengePointsMap[minusPlayer] != null) challengePointsMap[minusPlayer] -= 1
     }
   }
 
-  // Final Score = Stroke − H2H − Captain − LD/NP − Challenge (lower is better)
+  // Inactivity penalty: -3 for every 30 days since last round
+  const inactivityMap = {}
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  for (const name in playerRoundsMap) {
+    const lastDate = new Date(playerRoundsMap[name][0].date + 'T00:00:00')
+    const daysSince = Math.floor((today - lastDate) / (1000 * 60 * 60 * 24))
+    const periods = Math.floor(daysSince / 30)
+    inactivityMap[name] = periods > 0 ? periods * -3 : 0
+  }
+
+  // Final Score = Stroke − H2H − Captain − LD/NP − Challenges + Inactivity (lower is better)
   const ranked = Object.keys(strokeScores).map(name => {
     const last3 = playerRoundsMap[name].slice(0, 3)
     const totalAdjustment = last3.reduce((sum, r) => sum + (r.adjustment ?? 0), 0)
     const ld = ldPointsMap[name] || 0
     const np = npPointsMap[name] || 0
-    const chPts = challengePointsMap[name] || 0
+    const chPts = (challengePointsMap[name] || 0) + (challengePointsStored?.[name] || 0)
+    const inactivity = inactivityMap[name] || 0
     return {
       name,
       strokeScore:     strokeScores[name],
@@ -210,7 +292,8 @@ export function calculateRankings(rounds, captainAwards = [], h2hAdjustments = {
       npPoints:        np,
       ldnpPoints:      ld + np,
       challengePoints: chPts,
-      finalScore:      strokeScores[name] - (h2hPoints[name] || 0) - (captainPointsMap[name] || 0) - ld - np - chPts,
+      inactivityPoints: inactivity,
+      finalScore:      strokeScores[name] - (h2hPoints[name] || 0) - (captainPointsMap[name] || 0) - ld - np - chPts - inactivity,
       lastRounds:      last3,
       totalRounds:     playerRoundsMap[name].length,
     }

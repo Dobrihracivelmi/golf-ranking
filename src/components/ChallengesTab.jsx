@@ -28,6 +28,7 @@ export default function ChallengesTab({
   captainAuth,
   onAdd,
   onDelete,
+  onUpdate,
 }) {
   const [challenger, setChallenger]   = useState('')
   const [challenged, setChallenged]   = useState([])
@@ -173,13 +174,11 @@ export default function ChallengesTab({
       />
 
       {/* Expired */}
-      <ChallengeGroup
-        title="Expirované výzvy"
-        emoji="⏰"
+      <ExpiredGroup
         items={expired}
         captainAuth={captainAuth}
         onDelete={onDelete}
-        emptyMsg="Žiadne expirované výzvy"
+        onUpdate={onUpdate}
       />
     </div>
   )
@@ -235,11 +234,6 @@ function ChallengeGroup({ title, emoji, items, captainAuth, onDelete, emptyMsg }
                           : `❌ ${ch.challenger} prehral`}
                       </div>
                     )}
-                    {ch.resolved === 'expired' && (
-                      <div className="ch-card-penalty">
-                        ⚠️ Penalizácia −2 body: {ch.challenged.join(', ')}
-                      </div>
-                    )}
                   </div>
                   {captainAuth && (
                     <button
@@ -253,6 +247,143 @@ function ChallengeGroup({ title, emoji, items, captainAuth, onDelete, emptyMsg }
                     </button>
                   )}
                 </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ExpiredResolutionForm({ ch, captainAuth, onUpdate }) {
+  const players = [ch.challenger, ...ch.challenged]
+  const [hasInterest, setHasInterest] = useState(false)
+  const [plusPlayer,  setPlusPlayer]  = useState('')
+  const [minusPlayer, setMinusPlayer] = useState('')
+  const [saved, setSaved] = useState(false)
+
+  // Already resolved — show summary
+  if (ch.expiredResolution) {
+    const { plusPlayer: pp, minusPlayer: mp, noPoints } = ch.expiredResolution
+    return (
+      <div className="ch-expired-resolution ch-expired-resolved">
+        {noPoints
+          ? <span className="ch-resolution-done">✓ Bol záujem — bez bodov</span>
+          : <span className="ch-resolution-done">✓ Body: <span className="pos">+1 {pp}</span> / <span className="neg">−1 {mp}</span></span>
+        }
+      </div>
+    )
+  }
+
+  const canConfirm = hasInterest || (plusPlayer && minusPlayer && plusPlayer !== minusPlayer)
+
+  const handleConfirm = () => {
+    if (!captainAuth) return
+    if (hasInterest) {
+      onUpdate(ch.id, { expiredResolution: { noPoints: true } })
+    } else {
+      if (!plusPlayer || !minusPlayer || plusPlayer === minusPlayer) return
+      onUpdate(ch.id, { expiredResolution: { plusPlayer, minusPlayer } })
+    }
+    setSaved(true)
+  }
+
+  return (
+    <div className="ch-expired-resolution">
+      <label className="ch-interest-check">
+        <input
+          type="checkbox"
+          checked={hasInterest}
+          onChange={e => setHasInterest(e.target.checked)}
+        />
+        <span>Bol záujem o odohratie výzvy?</span>
+      </label>
+
+      {!hasInterest && (
+        <div className="ch-expired-dropdowns">
+          <div className="form-group">
+            <label className="form-label">Kto dostane +1 bod?</label>
+            <select
+              className="form-input"
+              value={plusPlayer}
+              onChange={e => setPlusPlayer(e.target.value)}
+            >
+              <option value="">— vybrať —</option>
+              {players.map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Kto dostane −1 bod?</label>
+            <select
+              className="form-input"
+              value={minusPlayer}
+              onChange={e => setMinusPlayer(e.target.value)}
+            >
+              <option value="">— vybrať —</option>
+              {players.filter(n => n !== plusPlayer).map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+        </div>
+      )}
+
+      {captainAuth ? (
+        <button
+          type="button"
+          className={`submit-btn submit-btn-sm${saved ? ' submit-saved' : ''}`}
+          onClick={handleConfirm}
+          disabled={saved || !canConfirm}
+        >
+          {saved ? '✓ Uložené' : 'Potvrdiť'}
+        </button>
+      ) : (
+        <p className="ch-captain-gate">Len kapitán môže potvrdiť</p>
+      )}
+    </div>
+  )
+}
+
+function ExpiredGroup({ items, captainAuth, onDelete, onUpdate }) {
+  return (
+    <div className="card" style={{ marginTop: 14 }}>
+      <div className="section-header">
+        <h2 className="section-title">⏰ Expirované výzvy</h2>
+        <span className="section-meta">{items.length}</span>
+      </div>
+
+      {items.length === 0 ? (
+        <p className="ch-empty">Žiadne expirované výzvy</p>
+      ) : (
+        <div className="ch-list">
+          {items.map(ch => {
+            const exp = ch.expiry || expiryDate(ch.date)
+            return (
+              <div key={ch.id} className="ch-card">
+                <div className="ch-card-top">
+                  <span className="ch-status-badge" title="Expirovaná">⏰</span>
+                  <div className="ch-card-info">
+                    <div className="ch-card-names">
+                      <span className="ch-challenger">{ch.challenger}</span>
+                      <span className="ch-arrow">→</span>
+                      <span className="ch-challenged">{ch.challenged.join(', ')}</span>
+                    </div>
+                    <div className="ch-card-dates">
+                      {fmtDate(ch.date)}
+                      <span className="ch-date-sep">·</span>
+                      expirácia {fmtDate(exp)}
+                    </div>
+                  </div>
+                  {captainAuth && (
+                    <button
+                      className="hc-delete"
+                      onClick={() => { if (window.confirm('Zmazať túto výzvu?')) onDelete(ch.id) }}
+                      title="Zmazať výzvu"
+                    >
+                      🗑
+                    </button>
+                  )}
+                </div>
+                <ExpiredResolutionForm ch={ch} captainAuth={captainAuth} onUpdate={onUpdate} />
               </div>
             )
           })}

@@ -6,6 +6,7 @@ import CaptainPanel from './components/CaptainPanel'
 import H2HTab from './components/H2HTab'
 import CoursesTab from './components/CoursesTab'
 import ChallengesTab from './components/ChallengesTab'
+import HcpTab from './components/HcpTab'
 import { useAppData } from './useAppData'
 
 export default function App() {
@@ -128,8 +129,9 @@ export default function App() {
 
   // ─────────────────────────────────────────────────────────────────────────
   const tabs = [
-    { id: 'ranking', label: 'Rebríček',    icon: '🏆' },
-    { id: 'add',     label: 'Pridať kolo', icon: '➕' },
+    { id: 'ranking', label: 'Rebríček',     icon: '🏆' },
+    { id: 'hcp',     label: 'Rebríček HCP', icon: '🏅' },
+    { id: 'add',     label: 'Pridať kolo',  icon: '➕' },
     { id: 'history', label: 'História',    icon: '📋' },
     { id: 'h2h',     label: 'H2H',         icon: '🤺' },
     { id: 'challenges', label: 'Výzvy',   icon: '⚔️' },
@@ -172,10 +174,13 @@ export default function App() {
 
       <main className="site-main">
         {tab === 'ranking' && (
-          <RankingTable rounds={data.rounds} captainAwards={data.captainAwards} h2hAdjustments={data.h2hAdjustments} challenges={data.challenges} />
+          <RankingTable rounds={data.rounds} captainAwards={data.captainAwards} h2hAdjustments={data.h2hAdjustments} challenges={data.challenges} h2hPointsStored={data.h2hPointsStored} challengePointsStored={data.challengePointsStored} />
+        )}
+        {tab === 'hcp' && (
+          <HcpTab rounds={data.rounds} />
         )}
         {tab === 'add' && (
-          <AddRound onAdd={addRound} onTabChange={setTab} captainAuth={captainAuth} challenges={data.challenges} onUpdateChallenge={updateChallenge} />
+          <AddRound onAdd={addRound} onTabChange={setTab} captainAuth={captainAuth} challenges={data.challenges} onUpdateChallenge={updateChallenge} rounds={data.rounds} captainAwards={data.captainAwards} h2hAdjustments={data.h2hAdjustments} h2hPointsStored={data.h2hPointsStored} challengePointsStored={data.challengePointsStored} />
         )}
         {tab === 'history' && (
           <History
@@ -186,7 +191,7 @@ export default function App() {
           />
         )}
         {tab === 'h2h' && (
-          <H2HTab rounds={data.rounds} captainAwards={data.captainAwards} h2hAdjustments={data.h2hAdjustments} challenges={data.challenges} />
+          <H2HTab rounds={data.rounds} captainAwards={data.captainAwards} h2hAdjustments={data.h2hAdjustments} challenges={data.challenges} h2hPointsStored={data.h2hPointsStored} challengePointsStored={data.challengePointsStored} />
         )}
         {tab === 'challenges' && (
           <ChallengesTab
@@ -194,6 +199,7 @@ export default function App() {
             captainAuth={captainAuth}
             onAdd={addChallenge}
             onDelete={deleteChallenge}
+            onUpdate={updateChallenge}
           />
         )}
         {tab === 'courses' && (
@@ -240,6 +246,8 @@ export default function App() {
               categories={data.captainCategories}
               awards={data.captainAwards}
               rounds={data.rounds}
+              challenges={data.challenges}
+              h2hPointsStored={data.h2hPointsStored}
               onAddAward={addCaptainAward}
               onDeleteAward={deleteCaptainAward}
               onAddCategory={addCaptainCategory}

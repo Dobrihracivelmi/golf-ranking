@@ -8,11 +8,61 @@ import {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function buildPlayerRounds(playerName, allRounds) {
+function buildPlayerRounds(playerName, allRounds, captainAwards) {
+  // Single chronological pass: compute pre-round rank, H2H delta and running
+  // cumulative for every round this player participated in.
+  const chronological = [...allRounds].sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date)
+    return (a.id || '').localeCompare(b.id || '')
+  })
+
+  const metaById = {}   // roundId -> { preRoundRank, h2hDelta, h2hCumulative }
+  let runningCumulative = 0
+
+  for (let i = 0; i < chronological.length; i++) {
+    const round = chronological[i]
+    const myPl  = round.players.find(pl => pl.name === playerName)
+    if (!myPl) continue
+
+    const prevRounds = chronological.slice(0, i)
+    const awardsUpTo = captainAwards.filter(a => !a.date || a.date <= round.date)
+
+    // Build pre-round rank map
+    let preRankMap  = {}
+    let preRoundRank = null
+    if (prevRounds.length > 0) {
+      const { ranked } = calculateRankings(prevRounds, awardsUpTo)
+      ranked.forEach((p, idx) => { preRankMap[p.name] = idx + 1 })
+      preRoundRank = preRankMap[playerName] ?? null
+    }
+
+    // H2H delta for this player in this round (upset model: points only when
+    // winner was ranked worse than loser before the round)
+    const myScore = myPl.adjustedStrokes ?? myPl.strokes
+    let roundDelta = 0
+    const myRank   = preRankMap[playerName]
+    if (myRank != null) {
+      for (const opp of round.players) {
+        if (opp.name === playerName) continue
+        const oppScore = opp.adjustedStrokes ?? opp.strokes
+        const oppRank  = preRankMap[opp.name]
+        if (oppRank == null || myScore === oppScore) continue
+        const iWon = myScore < oppScore
+        if (iWon && myRank > oppRank)        roundDelta += myRank - oppRank
+        else if (!iWon && oppRank > myRank)  roundDelta -= oppRank - myRank
+      }
+    }
+
+    runningCumulative += roundDelta
+    metaById[round.id] = { preRoundRank, h2hDelta: roundDelta, h2hCumulative: runningCumulative }
+  }
+
   const result = []
   for (const round of allRounds) {
     const p = round.players.find(pl => pl.name === playerName)
     if (!p) continue
+    const snap = round.h2hSnapshot?.[playerName]
+    const meta = metaById[round.id] ?? {}
     result.push({
       id:              round.id,
       date:            round.date,
@@ -27,6 +77,9 @@ function buildPlayerRounds(playerName, allRounds) {
       strokes:         p.strokes,
       adjustedStrokes: p.adjustedStrokes      ?? p.strokes,
       allPlayers:      round.players,
+      h2hDelta:        snap?.delta        ?? meta.h2hDelta    ?? null,
+      h2hCumulative:   snap?.cumulative   ?? null,
+      preRoundRank:    snap?.preRoundRank ?? meta.preRoundRank ?? null,
     })
   }
   return result.sort((a, b) => b.date.localeCompare(a.date))
@@ -130,6 +183,54 @@ function computeScoreHistory(playerName, allRounds, captainAwards) {
   return history
 }
 
+function computeBestPosition(playerName, allRounds, captainAwards) {
+  const chronological = [...allRounds].sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date)
+    return (a.id || '').localeCompare(b.id || '')
+  })
+
+  // Build timeline of { date, rank } after each round the player participated in
+  const timeline = []
+  let playerStarted = false
+
+  for (let i = 0; i < chronological.length; i++) {
+    if (!playerStarted) {
+      if (chronological[i].players.some(p => p.name === playerName)) {
+        playerStarted = true
+      } else {
+        continue
+      }
+    }
+
+    const roundsUpToNow = chronological.slice(0, i + 1)
+    const roundDate     = chronological[i].date
+    const awardsUpToNow = captainAwards.filter(a => !a.date || a.date <= roundDate)
+    const { ranked }    = calculateRankings(roundsUpToNow, awardsUpToNow)
+    const idx           = ranked.findIndex(p => p.name === playerName)
+    if (idx >= 0) {
+      timeline.push({ date: roundDate, rank: idx + 1 })
+    }
+  }
+
+  if (timeline.length === 0) return null
+
+  const bestRank = Math.min(...timeline.map(t => t.rank))
+
+  // Sum days at best rank: each entry holds from its date until the next entry's date (or today)
+  let daysAtBest = 0
+  const today = new Date()
+  for (let i = 0; i < timeline.length; i++) {
+    if (timeline[i].rank !== bestRank) continue
+    const from = new Date(timeline[i].date + 'T00:00:00')
+    const to   = i + 1 < timeline.length
+      ? new Date(timeline[i + 1].date + 'T00:00:00')
+      : today
+    daysAtBest += Math.max(0, Math.round((to - from) / (1000 * 60 * 60 * 24)))
+  }
+
+  return { bestRank, daysAtBest }
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -149,14 +250,18 @@ export default function PlayerModal({
 
   const toggleComment = (id) => setExpandedComments(prev => ({ ...prev, [id]: !prev[id] }))
 
-  const playerRounds = buildPlayerRounds(playerName, allRounds)
+  const playerRounds = buildPlayerRounds(playerName, allRounds, captainAwards)
   const stats        = computeStats(playerRounds)
-  const h2h          = computeH2H(playerName, playerRounds, rankMap)
   const myAwards     = [...captainAwards.filter(a => a.playerName === playerName)]
     .sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0))
 
   const scoreHistory = useMemo(
     () => computeScoreHistory(playerName, allRounds, captainAwards),
+    [playerName, allRounds, captainAwards]
+  )
+
+  const bestPosition = useMemo(
+    () => computeBestPosition(playerName, allRounds, captainAwards),
     [playerName, allRounds, captainAwards]
   )
 
@@ -181,9 +286,11 @@ export default function PlayerModal({
     return () => { document.body.style.overflow = '' }
   }, [])
 
-  const h2hWins   = h2h.filter(e => e.result === 'win').length
-  const h2hLosses = h2h.filter(e => e.result === 'loss').length
-  const h2hDraws  = h2h.filter(e => e.result === 'draw').length
+  const multiRounds = playerRounds.filter(r => r.allPlayers.length > 1)
+  const h2hWins   = multiRounds.reduce((s, r) => s + r.allPlayers.filter(p => p.name !== playerName && r.adjustedStrokes <  (p.adjustedStrokes ?? p.strokes)).length, 0)
+  const h2hLosses = multiRounds.reduce((s, r) => s + r.allPlayers.filter(p => p.name !== playerName && r.adjustedStrokes >  (p.adjustedStrokes ?? p.strokes)).length, 0)
+  const h2hDraws  = multiRounds.reduce((s, r) => s + r.allPlayers.filter(p => p.name !== playerName && r.adjustedStrokes === (p.adjustedStrokes ?? p.strokes)).length, 0)
+  const h2hTotal  = multiRounds.reduce((s, r) => s + r.allPlayers.filter(p => p.name !== playerName).length, 0)
 
   return (
     <div className="pm-overlay" onClick={onClose}>
@@ -325,7 +432,7 @@ export default function PlayerModal({
           {/* ── H2H ── */}
           {activeTab === 'h2h' && (
             <div className="pm-h2h">
-              {h2h.length === 0
+              {multiRounds.length === 0
                 ? <p className="pm-empty">Žiadne H2H súboje.</p>
                 : (
                   <>
@@ -336,36 +443,66 @@ export default function PlayerModal({
                       {h2hDraws > 0 && (
                         <><span className="pm-h2h-sum-sep">/</span><span>{h2hDraws}R</span></>
                       )}
+                      <span className="pm-h2h-sum-sep">·</span>
+                      <span className={`pm-h2h-sum-total ${player.h2hPoints > 0 ? 'pos' : player.h2hPoints < 0 ? 'neg' : ''}`}>
+                        H2H: {player.h2hPoints > 0 ? `+${player.h2hPoints}` : player.h2hPoints || 0}
+                      </span>
                     </div>
-                    {h2h.map((enc, i) => (
-                      <div key={i} className={`pm-h2h-row pm-h2h-${enc.result}`}>
-                        <span className={`pm-h2h-badge pm-h2h-badge-${enc.result}`}>
-                          {{ win: 'V', loss: 'P', draw: 'R' }[enc.result]}
-                        </span>
-                        <div className="pm-h2h-info">
-                          <span className="pm-h2h-opp">{enc.oppName}</span>
-                          <span className="pm-h2h-meta">
-                            {enc.course}
-                            {enc.tee ? ` · ${TEE_LABELS[enc.tee]?.toLowerCase()}` : ''}
-                            {' · '}{fmtDate(enc.date)}
-                          </span>
+
+                    {multiRounds.map(rnd => {
+                      const myScore = rnd.adjustedStrokes
+                      return (
+                        <div key={rnd.id} className="pm-h2h-round">
+                          <div className="pm-h2h-round-header">
+                            {rnd.preRoundRank != null && (
+                              <span className="pm-h2h-round-rank">#{rnd.preRoundRank}</span>
+                            )}
+                            <div className="pm-h2h-round-meta">
+                              <span className="pm-h2h-round-date">
+                                {fmtDate(rnd.date)}{rnd.tee ? ` · ${TEE_LABELS[rnd.tee]?.toLowerCase()}` : ''}
+                              </span>
+                              <span className="pm-h2h-round-course">{rnd.course}</span>
+                            </div>
+                            {rnd.h2hDelta !== null && (
+                              <div className="pm-h2h-round-right">
+                                <span className={`pm-h2h-round-delta ${rnd.h2hDelta > 0 ? 'pos' : rnd.h2hDelta < 0 ? 'neg' : 'zero'}`}>
+                                  {rnd.h2hDelta > 0 ? `+${rnd.h2hDelta}` : rnd.h2hDelta === 0 ? '±0' : rnd.h2hDelta}
+                                </span>
+                                {rnd.h2hCumulative !== null && (
+                                  <span className={`pm-h2h-round-cumul ${rnd.h2hCumulative > 0 ? 'pos' : rnd.h2hCumulative < 0 ? 'neg' : ''}`}>
+                                    Σ {rnd.h2hCumulative > 0 ? `+${rnd.h2hCumulative}` : rnd.h2hCumulative}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          {rnd.allPlayers
+                            .filter(p => p.name !== playerName)
+                            .map((opp, mi) => {
+                              const oppScore = opp.adjustedStrokes ?? opp.strokes
+                              const result   = myScore < oppScore ? 'win' : myScore > oppScore ? 'loss' : 'draw'
+                              return (
+                                <div key={mi} className="pm-h2h-matchup">
+                                  <span className={`pm-h2h-badge pm-h2h-badge-${result}`}>
+                                    {{ win: 'V', loss: 'P', draw: 'R' }[result]}
+                                  </span>
+                                  <span className="pm-h2h-opp">{opp.name}</span>
+                                  <div className="pm-h2h-scores">
+                                    <span className={result === 'win' ? 'pos' : result === 'loss' ? 'neg' : ''}>
+                                      {myScore}
+                                    </span>
+                                    <span className="pm-h2h-sep">:</span>
+                                    <span className={result === 'loss' ? 'pos' : result === 'win' ? 'neg' : ''}>
+                                      {oppScore}
+                                    </span>
+                                  </div>
+                                </div>
+                              )
+                            })
+                          }
                         </div>
-                        <div className="pm-h2h-scores">
-                          <span className={enc.result === 'win' ? 'pos' : enc.result === 'loss' ? 'neg' : ''}>
-                            {enc.myScore}
-                          </span>
-                          <span className="pm-h2h-sep">:</span>
-                          <span className={enc.result === 'loss' ? 'pos' : enc.result === 'win' ? 'neg' : ''}>
-                            {enc.oppScore}
-                          </span>
-                        </div>
-                        {enc.h2hDelta !== 0 && (
-                          <span className={`pm-h2h-pts ${enc.h2hDelta > 0 ? 'pos' : 'neg'}`}>
-                            {enc.h2hDelta > 0 ? `+${enc.h2hDelta}` : enc.h2hDelta}
-                          </span>
-                        )}
-                      </div>
-                    ))}
+                      )
+                    })}
                   </>
                 )
               }
@@ -527,6 +664,18 @@ export default function PlayerModal({
                         )}
                       </div>
                     )}
+                    {bestPosition && (
+                      <div className="pm-stat-card">
+                        <span className="pm-stat-label">Najvyššia dosiahnutá pozícia</span>
+                        <span className="pm-stat-value pos">#{bestPosition.bestRank}</span>
+                      </div>
+                    )}
+                    {bestPosition && (
+                      <div className="pm-stat-card">
+                        <span className="pm-stat-label">Počet dní na najvyššej pozícii</span>
+                        <span className="pm-stat-value">{bestPosition.daysAtBest} {bestPosition.daysAtBest === 1 ? 'deň' : bestPosition.daysAtBest >= 2 && bestPosition.daysAtBest <= 4 ? 'dni' : 'dní'}</span>
+                      </div>
+                    )}
                     {stats.worstBrutto != null && (
                       <div className="pm-stat-card">
                         <span className="pm-stat-label">Historicky najhoršie kolo brutto</span>
@@ -565,8 +714,14 @@ export default function PlayerModal({
                       </span>
                     </div>
                     <div className="pm-stat-card">
+                      <span className="pm-stat-label">💤 Penalta za neaktivitu</span>
+                      <span className={`pm-stat-value ${player.inactivityPoints < 0 ? 'neg' : ''}`}>
+                        {player.inactivityPoints < 0 ? player.inactivityPoints : 0}
+                      </span>
+                    </div>
+                    <div className="pm-stat-card">
                       <span className="pm-stat-label">H2H súboje</span>
-                      <span className="pm-stat-value">{h2h.length}</span>
+                      <span className="pm-stat-value">{h2hTotal}</span>
                       <span className="pm-stat-sub">
                         <span className="pos">{h2hWins}V</span>
                         {' / '}
@@ -575,21 +730,15 @@ export default function PlayerModal({
                       </span>
                     </div>
                     <div className="pm-stat-card">
-                      <span className="pm-stat-label">🏌️ Longest Drive</span>
-                      <span className={`pm-stat-value ${player.ldPoints > 0 ? 'pos' : ''}`}>
-                        {player.ldPoints > 0 ? `+${player.ldPoints}` : player.ldPoints || 0}
+                      <span className="pm-stat-label">🏌️ Longest Drive (celkovo)</span>
+                      <span className={`pm-stat-value ${playerRounds.filter(r => r.wonLd).length > 0 ? 'pos' : ''}`}>
+                        {playerRounds.filter(r => r.wonLd).length}× (+{playerRounds.filter(r => r.wonLd).length})
                       </span>
                     </div>
                     <div className="pm-stat-card">
-                      <span className="pm-stat-label">📍 Nearest to Pin</span>
-                      <span className={`pm-stat-value ${player.npPoints > 0 ? 'pos' : ''}`}>
-                        {player.npPoints > 0 ? `+${player.npPoints}` : player.npPoints || 0}
-                      </span>
-                    </div>
-                    <div className="pm-stat-card">
-                      <span className="pm-stat-label">⚔️ Penalizácia výziev</span>
-                      <span className={`pm-stat-value ${player.challengePoints < 0 ? 'neg' : ''}`}>
-                        {player.challengePoints < 0 ? player.challengePoints : 0}
+                      <span className="pm-stat-label">📍 Nearest to Pin (celkovo)</span>
+                      <span className={`pm-stat-value ${playerRounds.filter(r => r.wonNp).length > 0 ? 'pos' : ''}`}>
+                        {playerRounds.filter(r => r.wonNp).length}× (+{playerRounds.filter(r => r.wonNp).length})
                       </span>
                     </div>
                   </div>

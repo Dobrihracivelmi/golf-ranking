@@ -5,6 +5,8 @@ export default function CaptainPanel({
   categories,
   awards,
   rounds,
+  challenges,
+  h2hPointsStored,
   onAddAward,
   onAddCategory,
   onEditCategory,
@@ -405,7 +407,7 @@ export default function CaptainPanel({
         <div className="cpanel-backup">
           <div className="backup-section">
             <h3 className="section-title-sm">📥 Zálohovať dáta</h3>
-            <p className="backup-desc">Stiahne JSON súbor so všetkými dátami (kolá, body, kategórie).</p>
+            <p className="backup-desc">Stiahne JSON súbor so všetkými dátami (kolá, body, kategórie, výzvy).</p>
             <button
               className="submit-btn"
               onClick={() => {
@@ -413,6 +415,8 @@ export default function CaptainPanel({
                   rounds:            rounds || [],
                   captainAwards:     awards || [],
                   captainCategories: categories || [],
+                  challenges:        challenges || [],
+                  h2hPointsStored:   h2hPointsStored || {},
                   exportedAt:        new Date().toISOString(),
                 }
                 const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
@@ -449,9 +453,10 @@ export default function CaptainPanel({
                         alert('Neplatný formát zálohy. Súbor musí obsahovať rounds, captainAwards a captainCategories.')
                         return
                       }
+                      const challengeCount = Array.isArray(parsed.challenges) ? parsed.challenges.length : 0
                       if (window.confirm(
                         `Naozaj chceš obnoviť dáta?\n\n` +
-                        `Záloha obsahuje ${parsed.rounds.length} kôl, ${parsed.captainAwards.length} bodov, ${parsed.captainCategories.length} kategórií.\n\n` +
+                        `Záloha obsahuje ${parsed.rounds.length} kôl, ${parsed.captainAwards.length} bodov, ${parsed.captainCategories.length} kategórií, ${challengeCount} výziev.\n\n` +
                         `Toto prepíše všetky aktuálne dáta.`
                       )) {
                         onRestore(parsed)

@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { ALL_PLAYERS } from '../utils/ranking'
+import { ALL_PLAYERS, calculateRankings } from '../utils/ranking'
 import { COURSES_SORTED, TEE_LABELS } from '../utils/courses'
 import { resolveStatus } from './ChallengesTab'
 
 const emptyPlayer = () => ({ name: '', strokes: '', is9holes: false })
 
-export default function AddRound({ onAdd, onTabChange, captainAuth, challenges = [], onUpdateChallenge }) {
+export default function AddRound({ onAdd, onTabChange, captainAuth, challenges = [], onUpdateChallenge, rounds = [], captainAwards = [], h2hAdjustments = {}, h2hPointsStored = null, challengePointsStored = {} }) {
   const today = new Date().toISOString().split('T')[0]
   const [date,       setDate]       = useState(today)
   const [courseName, setCourseName] = useState('')
@@ -22,7 +22,7 @@ export default function AddRound({ onAdd, onTabChange, captainAuth, challenges =
   // ── Derived from course + tee selection ───────────────────────────────────
   const selectedCourse = COURSES_SORTED.find(c => c.name === courseName) || null
   const availableTees  = selectedCourse
-    ? ['white', 'yellow', 'black'].filter(t => selectedCourse[t] != null)
+    ? ['white', 'yellow', 'black', 'blue'].filter(t => selectedCourse[t] != null)
     : []
   const adjustment = (selectedCourse && tee !== '') ? selectedCourse[tee] : null
 
@@ -131,9 +131,16 @@ export default function AddRound({ onAdd, onTabChange, captainAuth, challenges =
         if (challengerResult && challengedResults.length > 0) {
           const challengerAdj = challengerResult.adjustedStrokes
           const allBeaten = challengedResults.every(p => challengerAdj < p.adjustedStrokes)
+          // Compute current rankings to store rank positions at resolution time
+          const { ranked: currentRanked } = calculateRankings(rounds, captainAwards, h2hAdjustments, challenges, h2hPointsStored, challengePointsStored)
+          const rankMap = {}
+          currentRanked.forEach((p, i) => { rankMap[p.name] = i + 1 })
           onUpdateChallenge(challengeId, {
             status: allBeaten ? 'fulfilled' : 'failed',
             roundId: `resolved-${Date.now()}`,
+            resolvedDate: new Date().toISOString().split('T')[0],
+            challengerRank: rankMap[ch.challenger] ?? null,
+            challengedRanks: ch.challenged.map(n => rankMap[n] ?? null),
           })
         }
       }
@@ -254,7 +261,6 @@ export default function AddRound({ onAdd, onTabChange, captainAuth, challenges =
           <div className="player-rows">
             {players.map((player, idx) => (
               <div key={idx} className="player-row">
-                <span className="player-row-num">{idx + 1}</span>
                 <div className="player-row-inputs">
                   <div className="form-group fg-grow">
                     <select
