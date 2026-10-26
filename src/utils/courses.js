@@ -2,7 +2,11 @@
 // white/yellow = strokes to add to raw score to normalise.
 // null = that tee is not available / not rated.
 const COURSES = [
+  { name: 'Albatros Praha',                               white: null, yellow: -5  },
   { name: 'Apex Golf Club - Báč',                        white: -4,  yellow: -1  },
+  { name: 'Bad Waltersdorf',                              white: null, yellow:  0  },
+  { name: 'Ca Amata',                                     white: null, yellow: -4  },
+  { name: 'Berchtesgadener Nemecko',                         white: null, yellow: -2  },
   { name: 'Bernolákovo - Park',                            white:  11, yellow:  11 },
   { name: 'BLACK RIVER GOLF RESORT Bernolákovo',          white: -15, yellow: -13 },
   { name: 'Black Stork - Veľká Lomnica (BRAID-VARDON)',   white: -6,   yellow: -3  },
@@ -13,6 +17,7 @@ const COURSES = [
   { name: 'Black Stork - Veľká Lomnica (BRAID)',           white: null, yellow: -6  },
   { name: 'Diamond Country Club Rakúsko',                   white: -7,   yellow: -4  },
   { name: 'Eurovalley Golf Park Club Malacky',             white: -14, yellow: -12 },
+  { name: 'Fontana Rakúsko',                                white: null, yellow: -5  },
   { name: 'Golf Agama Koš-Bojnice',                       white: null, yellow: -9  },
   { name: 'Golf Airport Šurany',                          white:  3,  yellow:  5  },
   { name: 'Golf Alpinka Košice',                          white: null, yellow:  5  },
@@ -22,20 +27,39 @@ const COURSES = [
   { name: 'Golf Piešťany',                                white: null, yellow:  4  },
   { name: 'Golf Trenčín',                                 white: null, yellow: 11  },
   { name: 'Golf Trnava',                                  white: null, yellow: 19  },
+  { name: 'Cornelia Belek Queen',                           white: null, yellow: -2  },
+  { name: 'Gloria Belek',                                  white: null, yellow: -3  },
+  { name: 'Golfclub Schloss Myllendonk',                   white: -5,  yellow: null },
   { name: 'Grafobal Group Golf Resort Skalica',            white: -5,  yellow: -2  },
-  { name: 'Gray Bear - Tále',                             white: -7,  yellow: -4  },
+  { name: 'Grabštejn',                                    white: null, yellow: -1  },
+  { name: 'Gray Bear - Tále',                             blue: -7,   white: -4  },
   { name: 'Green Meadows - Ivanka pri Nitre',             white: null, yellow: 10  },
-  { name: 'Green Resort Hrubá Borša',                     white: -6,  yellow: -2, black: -8 },
+  { name: 'Green Resort Hrubá Borša',                     white: -6,  yellow: -3, black: -8 },
   { name: 'Is Molas Sardinia',                              white: null, yellow: -5  },
+  { name: 'Jebel Ali Dubai',                                white: null, yellow: null, blue: -2  },
+  { name: 'Jezera Česko',                                  white: null, yellow:  1  },
   { name: 'St. Johan Alpendorf Blue',                      white: null, yellow:  7  },
   { name: 'Hainburg',                                     white: -2,  yellow:  0  },
+  { name: 'Klosters',                                     white: null, yellow: 13  },
+  { name: 'Monachus Česko',                               white: -4,  yellow: null },
+  { name: 'Mstětice',                                     white: null, yellow: -6  },
+  { name: 'Ostravice',                                    white: null, yellow: -6  },
+  { name: 'Herzogenaurach Nemecko',                        white: null, yellow: -4  },
   { name: 'Penati Golf Resort - Heritage',                white: -5,  yellow: -3  },
   { name: 'Penati Golf Resort - Legend (72)',              white: -8,  yellow: -4  },
   { name: 'Penati Golf Resort - Legend (73)',              white: -9,  yellow: -5  },
   { name: 'Red Oak Golf Nitra',                           white: -4,  yellow: -1  },
+  { name: 'Riverside Zagreb',                               white: null, yellow: -5  },
   { name: 'Royal Valley Malý Slavkov',                    white:  3,  yellow:  7  },
+  { name: 'Schönfeld Rakúsko',                            white: null, yellow: -3  },
+  { name: 'Mladá Boleslav',                               white: null, yellow: -4  },
+  { name: 'Schwechat',                                    white: null, yellow:  9  },
   { name: 'Sedin Golf Resort',                            white: -9,  yellow: -6  },
   { name: 'Tri Duby - Sliač',                             white:  4,  yellow:  4  },
+  { name: 'Vale Pisão',                                   white: null, yellow: -7  },
+  { name: 'Quinta da Marinha',                              white: null, yellow: -2  },
+  { name: 'Zala Maďarsko',                               white: null, yellow: -2  },
+  { name: 'Zillertal Rakúsko',                            white: null, yellow: -1  },
 ]
 
 // Pre-sorted alphabetically for the dropdown
@@ -43,4 +67,4 @@ export const COURSES_SORTED = [...COURSES].sort((a, b) =>
   a.name.localeCompare(b.name, 'sk')
 )
 
-export const TEE_LABELS = { white: 'Biele', yellow: 'Žlté', black: 'Čierne' }
+export const TEE_LABELS = { white: 'Biele', yellow: 'Žlté', black: 'Čierne', blue: 'Modré' }
